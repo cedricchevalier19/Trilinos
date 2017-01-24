@@ -88,7 +88,7 @@ namespace Belos {
    * This struct is utilized by BiCGStabIterationL::initialize() and BiCGStabIterationL::getState().
    */
   template <class ScalarType, class MV>
-  struct BiCGStabIterationStateL {
+  struct BiCGStabLIterationState {
 
     /*! \brief The current residual. */
     Teuchos::RCP<const MV> R0;
@@ -101,7 +101,7 @@ namespace Belos {
 
     ScalarType rho_old, alpha, omega;
 
-    BiCGStabIterationStateL() : R0(Teuchos::null), Rhat(Teuchos::null), U0(Teuchos::null)
+    BiCGStabLIterationState() : R0(Teuchos::null), Rhat(Teuchos::null), U0(Teuchos::null)
     {
       rho_old = Teuchos::ScalarTraits<ScalarType>::one();
       alpha = Teuchos::ScalarTraits<ScalarType>::one();
@@ -110,7 +110,7 @@ namespace Belos {
   };
 
   template<class ScalarType, class MV, class OP>
-  class BiCGStabIterL : virtual public Iteration<ScalarType,MV,OP> {
+  class BiCGStabLIter : virtual public Iteration<ScalarType,MV,OP> {
 
   public:
 
@@ -130,13 +130,13 @@ namespace Belos {
      * This constructor takes pointers required by the linear solver, in addition
      * to a parameter list of options for the linear solver.
      */
-    BiCGStabIterL( const Teuchos::RCP<LinearProblem<ScalarType,MV,OP> > &problem,
+    BiCGStabLIter( const Teuchos::RCP<LinearProblem<ScalarType,MV,OP> > &problem,
                           const Teuchos::RCP<OutputManager<ScalarType> > &printer,
                           const Teuchos::RCP<StatusTest<ScalarType,MV,OP> > &tester,
                           Teuchos::ParameterList &params );
 
     //! Destructor.
-    virtual ~BiCGStabIterL() {};
+    virtual ~BiCGStabLIter() {};
     //@}
 
 
@@ -178,14 +178,14 @@ namespace Belos {
      * \note For any pointer in \c newstate which directly points to the multivectors in
      * the solver, the data is not copied.
      */
-    void initializeBiCGStabL(BiCGStabIterationStateL<ScalarType,MV>& newstate);
+    void initializeBiCGStabL(BiCGStabLIterationState<ScalarType,MV>& newstate);
 
     /*! \brief Initialize the solver with the initial vectors from the linear problem
      *  or random data.
      */
     void initialize()
     {
-      BiCGStabIterationStateL<ScalarType,MV> empty;
+      BiCGStabLIterationState<ScalarType,MV> empty;
       initializeBiCGStabL(empty);
     }
 
@@ -196,8 +196,8 @@ namespace Belos {
      * \returns A BiCGStabIterationState object containing const pointers to the current
      * solver state.
      */
-    BiCGStabIterationStateL<ScalarType,MV> getState() const {
-      BiCGStabIterationStateL<ScalarType,MV> state;
+    BiCGStabLIterationState<ScalarType,MV> getState() const {
+      BiCGStabLIterationState<ScalarType,MV> state;
       state.R0 = R0_;
       state.Rhat = Rhat_;
       state.U0 = U0_;
@@ -222,7 +222,7 @@ namespace Belos {
     //! Get the norms of the residuals native to the solver.
     //! \return A std::vector of length blockSize containing the native residuals.
     // amk TODO: are the residuals actually being set?  What is a native residual?
-    Teuchos::RCP<const MV> getNativeResiduals( std::vector<MagnitudeType> *norms ) const { return R_; }
+    Teuchos::RCP<const MV> getNativeResiduals( std::vector<MagnitudeType> *norms ) const { return R0_; }
 
     //! Get the current update to the linear system.
     /*! \note This method returns a null pointer because the linear problem is current.
@@ -254,9 +254,6 @@ namespace Belos {
 
   private:
 
-    void axpy(const ScalarType alpha, const MV & A,
-              const std::vector<ScalarType> beta, const MV& B, MV& mv, bool minus=false);
-
     //
     // Classes inputed through constructor that define the linear problem to be solved.
     //
@@ -281,6 +278,7 @@ namespace Belos {
     // Current number of iterations performed.
     int iter_;
 
+    int l_;
     //
     // State Storage
     //
@@ -299,7 +297,7 @@ namespace Belos {
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Constructor.
   template<class ScalarType, class MV, class OP>
-  BiCGStabIterL<ScalarType,MV,OP>::BiCGStabIterL(const Teuchos::RCP<LinearProblem<ScalarType,MV,OP> > &problem,
+  BiCGStabLIter<ScalarType,MV,OP>::BiCGStabLIter(const Teuchos::RCP<LinearProblem<ScalarType,MV,OP> > &problem,
                                                                const Teuchos::RCP<OutputManager<ScalarType> > &printer,
                                                                const Teuchos::RCP<StatusTest<ScalarType,MV,OP> > &tester,
                                                                Teuchos::ParameterList &params ):
@@ -307,6 +305,7 @@ namespace Belos {
     om_(printer),
     stest_(tester),
     numRHS_(0),
+    l_(1),
     initialized_(false),
     iter_(0)
   {
@@ -316,7 +315,7 @@ namespace Belos {
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Initialize this iteration object
   template <class ScalarType, class MV, class OP>
-  void BiCGStabIterL<ScalarType,MV,OP>::initializeBiCGStabL(BiCGStabIterationState<ScalarType,MV>& newstate)
+  void BiCGStabLIter<ScalarType,MV,OP>::initializeBiCGStabL(BiCGStabLIterationState<ScalarType,MV>& newstate)
   {
     // Check if there is any multivector to clone from.
     Teuchos::RCP<const MV> lhsMV = lp_->getCurrLHSVec();
@@ -412,7 +411,7 @@ namespace Belos {
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Iterate until the status test informs us we should stop.
   template <class ScalarType, class MV, class OP>
-  void BiCGStabIterL<ScalarType,MV,OP>::iterate()
+  void BiCGStabLIter<ScalarType,MV,OP>::iterate()
   {
     using Teuchos::RCP;
 
@@ -447,10 +446,10 @@ namespace Belos {
     Teuchos::RCP<MV> X = lp_->getCurrLHSVec();
 
     // For the polynomial part
-    Teuchos::SerialSpdDenseSolver z_solve;
-    Teuchos::SerialSymDenseMatrix Z(l_);
-    Teuchos::SerialDenseMatrix B(l_, 1);
-    Teuchos::SerialDenseMatrix Y(l_, 1);
+    Teuchos::SerialSpdDenseSolver<int, ScalarType> z_solve;
+    Teuchos::SerialSymDenseMatrix<int, ScalarType> Z(l_);
+    Teuchos::SerialDenseMatrix<int, ScalarType> B(l_, 1);
+    Teuchos::SerialDenseMatrix<int, ScalarType> Y(l_, 1);
     
     ////////////////////////////////////////////////////////////////
     // Iterate until the status test tells us to stop.
@@ -464,10 +463,10 @@ namespace Belos {
 
       for (int j = 0 ; j < l_ - 1; j++) {
 	//rho_1 = <R_j, Rhat_>, rho_1 = res
-        MVT::MvDot(*R_[j], *Rhat_, res);
+        MVT::MvDot(*(R[j]), *Rhat_, res);
       
         // beta = ( rho_1 / rho_0 ) (alpha)
-	beta = (res[0] / rho_0) * (alpha);
+	beta = (res[0] / rho_0_) * (alpha_);
         rho_0_ = res[0];
 	
         for (int i = 0 ; i < j ; i++) {
@@ -480,17 +479,17 @@ namespace Belos {
 	lp_->applyLeftPrec(*(U[j+1]), *(U[j+1]));
 
 	// sigma = <U_{j+1}, Rhat_>
-        MVT::MvDot(*(U[j+1]), *Rhat, res);
+        MVT::MvDot(*(U[j+1]), *Rhat_, res);
 	// alpha = rho_1 / sigma
 	// CC: here rho_0 == rho_1
 	alpha_ = rho_0_ / res[0];
 	
 	// x = x + alpha*u_0
-	MVT::MvAddMv(one, *X, alpha, *(U[0]), *X);
+	MVT::MvAddMv(one, *X, alpha_, *(U[0]), *X);
 
 	for (int  i = 0 ; i < j ; ++i ) {
 	  // R_i = R_i - alpha*U_{i+1}
-	  MVT::MvAddMv(one, *(R[i]), -alpha, *(U[i+1]), *(R[i]));
+	  MVT::MvAddMv(one, *(R[i]), -alpha_, *(U[i+1]), *(R[i]));
 	}
 
 	// r_{j+1} = K\Ar_j
@@ -514,7 +513,7 @@ namespace Belos {
       }
 
       // y = Z\y
-      z_solve->setMatrix(z);
+      z_solve->setMatrix(Z);
       z_solve->setVectors(Y, B);
       z_solve->solve();
 
@@ -524,15 +523,15 @@ namespace Belos {
       // Update
       for (int i = 0 ; i < l_ ; ++i ){
 	// u_0 = u_0 - y[i]u_i
-	MVT::MvAddMv(one, *(U[0]), -y(i,0), *(U[i+1]), U[0]);
+	MVT::MvAddMv(one, *(U[0]), -Y(i,0), *(U[i+1]), U[0]);
 	// x = x + y[i] r_{i-1}
-	MVT::MvAddMv(one, *X, y(i,0), *(R[i]), X);
+	MVT::MvAddMv(one, *X, Y(i,0), *(R[i]), X);
 	// r_0 = r_0 - y[i] r_i
-       	MVT::MvAddMv(one, *(R[0]), -y(i,0), *(R[i+1]), *(R[0]));
+       	MVT::MvAddMv(one, *(R[0]), -Y(i,0), *(R[i+1]), *(R[0]));
       }
 
-      MVT::Assign(*(R[0]), *R_);
-      MVT::Assign(*(U[0]), *U_);
+      MVT::Assign(*(R[0]), *R0_);
+      MVT::Assign(*(U[0]), *U0_);
     } // end while (sTest_->checkStatus(this) != Passed)
   }
 

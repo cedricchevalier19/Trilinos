@@ -26,6 +26,8 @@ APPEND_SET(HEADERS
   Belos_Details_EBelosSolverType.hpp
   BelosBiCGStabIter.hpp
   BelosBiCGStabSolMgr.hpp
+  BelosBiCGStabLIter.hpp
+  BelosBiCGStabLSolMgr.hpp
   BelosBlockCGIter.hpp
   BelosBlockCGSolMgr.hpp
   BelosBlockFGmresIter.hpp

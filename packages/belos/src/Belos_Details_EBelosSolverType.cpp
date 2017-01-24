@@ -121,6 +121,9 @@ getCanonicalNameFromAlias (const std::string& candidateAlias)
   else if (candidateAlias == "BICGSTAB") {
     return std::make_pair (std::string ("BICGSTAB"), true);
   }
+  else if (candidateAlias == "BICGSTABL") {
+    return std::make_pair (std::string ("BICGSTABL"), true);
+  }
   else { // not a known alias
     return std::make_pair (candidateAlias, false);
   }
@@ -151,7 +154,8 @@ solverNameAliases ()
     {"CGPOLY"},
     {"SEED CG"},
     {"FIXED POINT"},
-    {"BICGSTAB"}
+    {"BICGSTAB"},
+    {"BICGSTABL"}
   };
 #else // NOT HAVE_TEUCHOSCORE_CXX11
   std::vector<std::string> names;
@@ -177,6 +181,7 @@ solverNameAliases ()
   names.push_back ("SEED CG");
   names.push_back ("FIXED POINT");
   names.push_back ("BICGSTAB");
+  names.push_back ("BICGSTABL");
 
   return names;
 #endif // HAVE_TEUCHOSCORE_CXX11
@@ -200,7 +205,8 @@ canonicalSolverNames ()
     {"HYBRID BLOCK GMRES"},
     {"PCPG"},
     {"FIXED POINT"},
-    {"BICGSTAB"}
+    {"BICGSTAB"},
+    {"BICGSTABL"}
   };
 }
 
