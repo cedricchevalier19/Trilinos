@@ -46,9 +46,11 @@
     \brief Belos concrete class for performing the pseudo-block BiCGStab iteration.
 */
 
+#include <algorithm>
+
 #include "BelosConfigDefs.hpp"
 #include "BelosTypes.hpp"
-#include "BelosCGIteration.hpp"
+
 
 #include "BelosLinearProblem.hpp"
 #include "BelosMatOrthoManager.hpp"
@@ -89,25 +91,21 @@ namespace Belos {
   struct BiCGStabIterationStateL {
 
     /*! \brief The current residual. */
-    Teuchos::RCP<const MV> R;
+    Teuchos::RCP<const MV> R0;
 
     /*! \brief The initial residual. */
     Teuchos::RCP<const MV> Rhat;
 
-    /*! \brief The first decent direction vector */
-    Teuchos::RCP<const MV> P;
-
     /*! \brief A * M * the first decent direction vector */
-    Teuchos::RCP<const MV> V;
+    Teuchos::RCP<const MV> U0;
 
-    std::vector<ScalarType> rho_old, alpha, omega;
+    ScalarType rho_old, alpha, omega;
 
-    BiCGStabIterationStateL() : R(Teuchos::null), Rhat(Teuchos::null),
-                    P(Teuchos::null), V(Teuchos::null)
+    BiCGStabIterationStateL() : R0(Teuchos::null), Rhat(Teuchos::null), U0(Teuchos::null)
     {
-      rho_old.clear();
-      alpha.clear();
-      omega.clear();
+      rho_old = Teuchos::ScalarTraits<ScalarType>::one();
+      alpha = Teuchos::ScalarTraits<ScalarType>::one();
+      omega = Teuchos::ScalarTraits<ScalarType>::one();
     }
   };
 
@@ -200,11 +198,10 @@ namespace Belos {
      */
     BiCGStabIterationStateL<ScalarType,MV> getState() const {
       BiCGStabIterationStateL<ScalarType,MV> state;
-      state.R = R_;
+      state.R0 = R0_;
       state.Rhat = Rhat_;
-      state.P = P_;
-      state.V = V_;
-      state.rho_old = rho_old_;
+      state.U0 = U0_;
+      state.rho_0 = rho_0_;
       state.alpha = alpha_;
       state.omega = omega_;
       return state;
@@ -291,15 +288,12 @@ namespace Belos {
     Teuchos::RCP<MV> Rhat_;
     //
     // Residual
-    Teuchos::RCP<MV> R_;
-    //
-    // Direction vector 1
-    Teuchos::RCP<MV> P_;
+    Teuchos::RCP<MV> R0_;
     //
     // Operator applied to preconditioned direction vector 1
-    Teuchos::RCP<MV> V_;
+    Teuchos::RCP<MV> U0_;
     //
-    std::vector<ScalarType> rho_old_, alpha_, omega_;
+    ScalarType rho_0_, alpha_, omega_;
   };
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -342,15 +336,10 @@ namespace Belos {
     
     // Initialize the state storage
     // If the subspace has not be initialized before or has changed sizes, generate it using the LHS or RHS from lp_.
-    if (Teuchos::is_null(R_) || MVT::GetNumberVecs(*R_)!=numRHS_) {
-      R_ = MVT::Clone( *tmp, numRHS_ );
+    if (Teuchos::is_null(R0_) || MVT::GetNumberVecs(*R0_)!=numRHS_) {
+      R0_ = MVT::Clone( *tmp, numRHS_ );
       Rhat_ = MVT::Clone( *tmp, numRHS_ );
-      P_ = MVT::Clone( *tmp, numRHS_ );
-      V_ = MVT::Clone( *tmp, numRHS_ );
-
-      rho_old_.resize(numRHS_);
-      alpha_.resize(numRHS_);
-      omega_.resize(numRHS_);
+      U0_ = MVT::Clone( *tmp, numRHS_ );
     }
 
     // NOTE:  In BiCGStabIter R_, the initial residual, is required!!!
@@ -360,21 +349,21 @@ namespace Belos {
     // Create convenience variable for one.
     const ScalarType one = Teuchos::ScalarTraits<ScalarType>::one();
 
-    if (!Teuchos::is_null(newstate.R)) {
+    if (!Teuchos::is_null(newstate.R0)) {
 
-      TEUCHOS_TEST_FOR_EXCEPTION( MVT::GetGlobalLength(*newstate.R) != MVT::GetGlobalLength(*R_),
+      TEUCHOS_TEST_FOR_EXCEPTION( MVT::GetGlobalLength(*newstate.R0) != MVT::GetGlobalLength(*R0_),
                           std::invalid_argument, errstr );
-      TEUCHOS_TEST_FOR_EXCEPTION( MVT::GetNumberVecs(*newstate.R) != numRHS_,
+      TEUCHOS_TEST_FOR_EXCEPTION( MVT::GetNumberVecs(*newstate.R0) != numRHS_,
                           std::invalid_argument, errstr );
 
       // Copy residual vectors from newstate into R
-      if (newstate.R != R_) {
+      if (newstate.R0 != R0_) {
         // Assigned by the new state
-        MVT::Assign(*newstate.R, *R_);
+        MVT::Assign(*newstate.R0, *R0_);
       }
       else {
         // Computed
-        lp_->computeCurrResVec(R_.get());
+        lp_->computeCurrResVec(R0_.get());
       }
 
       // Set Rhat
@@ -387,55 +376,26 @@ namespace Belos {
         MVT::Assign(*lp_->getInitResVec(), *Rhat_);
       }
 
-      // Set V
-      if (!Teuchos::is_null(newstate.V) && newstate.V != V_) {
+      // Set U0
+      if (!Teuchos::is_null(newstate.U0) && newstate.U != U0_) {
         // Assigned by the new state
-        MVT::Assign(*newstate.V, *V_);
+        MVT::Assign(*newstate.U0, *U0_);
       }
       else {
         // Initial V = 0
-        MVT::MvInit(*V_);
+        MVT::MvInit(*U0_);
       }
 
-      // Set P
-      if (!Teuchos::is_null(newstate.P) && newstate.P != P_) {
-        // Assigned by the new state
-        MVT::Assign(*newstate.P, *P_);
-      }
-      else {
-        // Initial P = 0
-        MVT::MvInit(*P_);
-      }
-
+ 
       // Set rho_old
-      if (newstate.rho_old.size () == static_cast<size_t> (numRHS_)) {
-        // Assigned by the new state
-        rho_old_ = newstate.rho_old;
-      }
-      else {
-        // Initial rho = 1
-        rho_old_.assign(numRHS_,one);
-      }
+      rho_0_ = newstate.rho_0;
+
 
       // Set alpha
-      if (newstate.alpha.size() == static_cast<size_t> (numRHS_)) {
-        // Assigned by the new state
-        alpha_ = newstate.alpha;
-      }
-      else {
-        // Initial rho = 1
-        alpha_.assign(numRHS_,one);
-      }
+      alpha_ = newstate.alpha;
 
       // Set omega
-      if (newstate.omega.size() == static_cast<size_t> (numRHS_)) {
-        // Assigned by the new state
-        omega_ = newstate.omega;
-      }
-      else {
-        // Initial rho = 1
-        omega_.assign(numRHS_,one);
-      }
+      omega_ = newstate.omega;
 
     }
     else {
@@ -464,31 +424,34 @@ namespace Belos {
     }
 
     // Allocate memory for scalars.
-    int i=0;
-    std::vector<ScalarType> rho_new( numRHS_ ), beta( numRHS_ );
-    std::vector<ScalarType> rhatV( numRHS_ ), tT( numRHS_ ), tS( numRHS_ );
-
+    std::vector<ScalarType> res;
+    ScalarType beta;
+    ScalarType sigma;
+    
     // Create convenience variable for one.
     const ScalarType one = Teuchos::ScalarTraits<ScalarType>::one();
 
-    // TODO: We may currently be using more space than is required
-    RCP<MV> leftPrecVec, leftPrecVec2;
-
-    RCP<MV> Y, Z, S, T;
-    S = MVT::Clone( *R_, numRHS_ );
-    T = MVT::Clone( *R_, numRHS_ );
-    if (lp_->isLeftPrec() || lp_->isRightPrec()) {
-      Y = MVT::Clone( *R_, numRHS_ );
-      Z = MVT::Clone( *R_, numRHS_ );
-    }
-    else {
-      Y = P_;
-      Z = S;
+    // Residuals
+    std::vector<RCP<MV>> R(l_+1);
+    for (int i = 0 ; i <= l_ ; ++i) {
+      R[i] = MVT::CloneCopy(*R0_, 1); // CC: only need R[0] = R0
     }
 
+    // U vectors
+    std::vector<RCP<MV>> U(l_+1);
+    for (int i = 0 ; i <= l_ ; ++i) {
+      U[i] = MVT::CloneCopy(*U0_, 1); // CC: only need U[0] = U0
+    }
+    
     // Get the current solution std::vector.
     Teuchos::RCP<MV> X = lp_->getCurrLHSVec();
 
+    // For the polynomial part
+    Teuchos::SerialSpdDenseSolver z_solve;
+    Teuchos::SerialSymDenseMatrix Z(l_);
+    Teuchos::SerialDenseMatrix B(l_, 1);
+    Teuchos::SerialDenseMatrix Y(l_, 1);
+    
     ////////////////////////////////////////////////////////////////
     // Iterate until the status test tells us to stop.
     //
@@ -496,105 +459,83 @@ namespace Belos {
 
       // Increment the iteration
       iter_++;
-      rho_old = -omega * rho_old;
+      // rho_0 = - omega * rho_0
+      rho_0_ *= (-omega_);
 
       for (int j = 0 ; j < l_ - 1; j++) {
-
-	//rho_new = <R_j, Rhat_>
-        MVT::MvDot(*R_[j],*Rhat_,&rho_new);
-
+	//rho_1 = <R_j, Rhat_>, rho_1 = res
+        MVT::MvDot(*R_[j], *Rhat_, res);
       
-        // beta = ( rho_new / rho_old ) (alpha)
-        beta = (rho_new / rho_old_) * (alpha_);
-
-        rho_old = rho_new;
+        // beta = ( rho_1 / rho_0 ) (alpha)
+	beta = (res[0] / rho_0) * (alpha);
+        rho_0_ = res[0];
+	
         for (int i = 0 ; i < j ; i++) {
 	  // U_i = R_i - beta * U_i
-	  MVT::MvAddMv(one, R[i], -beta, U[i], U[i]);
+	  MVT::MvAddMv(one, *(R[i]), -beta, *(U[i]), *(U[i]));
         }
 
         // U_{j+1} = K\(A U_j)
-	lp_->applyOp(U[j+1], U[j]);
-	lp_->applyLeftPrec(U[j+1], U[j+1]);
+	lp_->applyOp(*(U[j+1]), *(U[j]));
+	lp_->applyLeftPrec(*(U[j+1]), *(U[j+1]));
 
 	// sigma = <U_{j+1}, Rhat_>
-        MVT::MvDot(U[j+1], *Rhat, &sigma);
-	// alpha = rho_new / sigma
-	alpha = rho_new / sigma;
-
+        MVT::MvDot(*(U[j+1]), *Rhat, res);
+	// alpha = rho_1 / sigma
+	// CC: here rho_0 == rho_1
+	alpha_ = rho_0_ / res[0];
+	
 	// x = x + alpha*u_0
-	MVT::MvAddMv(one, X, alpha, U[0], X);
+	MVT::MvAddMv(one, *X, alpha, *(U[0]), *X);
 
 	for (int  i = 0 ; i < j ; ++i ) {
 	  // R_i = R_i - alpha*U_{i+1}
-	  MVT::MvAddMv(one, R[i], -alpha, U[i+1], R[i]);
+	  MVT::MvAddMv(one, *(R[i]), -alpha, *(U[i+1]), *(R[i]));
 	}
 
 	// r_{j+1} = K\Ar_j
-	lp_->applyOp(U[j+1], U[j]);
-	lp_->applyLeftPrec(R[j+1], R[j+1]);
+	lp_->applyOp(*(U[j+1]), *(U[j]));
+	lp_->applyLeftPrec(*(R[j+1]), *(R[j+1]));
       }
 
+      //------------------
       // Polynomial Part
 
-      Teuchos::SerialSymDenseMatrix<int, ScalarType> z(l_);
+      Teuchos::SerialSymDenseMatrix<int, ScalarType> Z(l_);
       for (int i = 0 ; i < l_ ; ++i) {
 	for (int j = 0 ; j < i ; ++j ) {
-	  // Z[i,j] = <r_j, r_i>
-	  MVT::MvDot(R[j], R[i], z(i,j));
+	  // Z[i,j] = <r_j, r_i> , (i,j) \in [1,l]
+	  MVT::MvDot(*(R[j+1]), *(R[i+1]), res);
+	  Z(i,j) = res[0] ;
 	}
 	// Y[i] = <r_0, r_i>
-	MVT::MvDot(R[0], R[i], Y(i));
+	MVT::MvDot(*(R[0]), *(R[i+1]), res);
+	B(i,0) = res[i];
       }
 
       // y = Z\y
-      Teuchos::SerialDenseSolver z_solve;
       z_solve->setMatrix(z);
-      z_solve->setVectors(Y, Y);
+      z_solve->setVectors(Y, B);
       z_solve->solve();
 
       // omega = Y[l]
-      omega = Y(l);
+      omega_ = Y(l_-1, 0);
 
       // Update
-      for (int i = 0 ; i < l ; ++i ){
+      for (int i = 0 ; i < l_ ; ++i ){
 	// u_0 = u_0 - y[i]u_i
-	MVT::MvAddMv(one, U[0], -y[i], U[i], U[0]);
+	MVT::MvAddMv(one, *(U[0]), -y(i,0), *(U[i+1]), U[0]);
 	// x = x + y[i] r_{i-1}
-	MVT::MvAddMv(one, X, y[i], R[i-1], X);
+	MVT::MvAddMv(one, *X, y(i,0), *(R[i]), X);
 	// r_0 = r_0 - y[i] r_i
-       	MVT::MvAddMv(one, R[0], -y[i], R[i], R[0]);
+       	MVT::MvAddMv(one, *(R[0]), -y(i,0), *(R[i+1]), *(R[0]));
       }
 
-      rho_old_ = rho_new;
+      MVT::Assign(*(R[0]), *R_);
+      MVT::Assign(*(U[0]), *U_);
     } // end while (sTest_->checkStatus(this) != Passed)
-  }
-
-
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-  // Iterate until the status test informs us we should stop.
-  template <class ScalarType, class MV, class OP>
-  void BiCGStabIter<ScalarType,MV,OP>::axpy(const ScalarType alpha, const MV & A,
-                                            const std::vector<ScalarType> beta, const MV& B, MV& mv, bool minus)
-  {
-    Teuchos::RCP<const MV> A1, B1;
-    Teuchos::RCP<MV> mv1;
-    std::vector<int> index(1);
-
-    for(int i=0; i<numRHS_; i++) {
-      index[0] = i;
-      A1 = MVT::CloneView(A,index);
-      B1 = MVT::CloneView(B,index);
-      mv1 = MVT::CloneViewNonConst(mv,index);
-      if(minus) {
-        MVT::MvAddMv(alpha,*A1,-beta[i],*B1,*mv1);
-      }
-      else {
-        MVT::MvAddMv(alpha,*A1,beta[i],*B1,*mv1);
-      }
-    }
   }
 
 } // end Belos namespace
 
-#endif /* BELOS_BICGSTAB_ITER_HPP */
+#endif /* BELOS_BICGSTABL_ITER_HPP */
