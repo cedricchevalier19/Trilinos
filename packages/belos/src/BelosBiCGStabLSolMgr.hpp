@@ -724,7 +724,7 @@ ReturnType BiCGStabLSolMgr<ScalarType,MV,OP>::solve ()
 
       // Get a new state struct and initialize the solver.
       BiCGStabLIterationState<ScalarType,MV> newState;
-      newState.R = R_0;
+      newState.R0 = R_0;
       block_cg_iter->initializeBiCGStabL(newState);
 
       while(1) {
@@ -781,7 +781,7 @@ ReturnType BiCGStabLSolMgr<ScalarType,MV,OP>::solve ()
 
             // Set the new state and initialize the solver.
             BiCGStabLIterationState<ScalarType,MV> defstate;
-            defstate.R = R_0;
+            defstate.R0 = R_0;
             block_cg_iter->initializeBiCGStabL(defstate);
           }
 

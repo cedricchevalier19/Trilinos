@@ -99,11 +99,11 @@ namespace Belos {
     /*! \brief A * M * the first decent direction vector */
     Teuchos::RCP<const MV> U0;
 
-    ScalarType rho_old, alpha, omega;
+    ScalarType rho_0, alpha, omega;
 
     BiCGStabLIterationState() : R0(Teuchos::null), Rhat(Teuchos::null), U0(Teuchos::null)
     {
-      rho_old = Teuchos::ScalarTraits<ScalarType>::one();
+      rho_0 = Teuchos::ScalarTraits<ScalarType>::one();
       alpha = Teuchos::ScalarTraits<ScalarType>::one();
       omega = Teuchos::ScalarTraits<ScalarType>::one();
     }
@@ -305,9 +305,9 @@ namespace Belos {
     om_(printer),
     stest_(tester),
     numRHS_(0),
-    l_(1),
     initialized_(false),
-    iter_(0)
+    iter_(0),
+    l_(1)
   {
   }
 
@@ -376,7 +376,7 @@ namespace Belos {
       }
 
       // Set U0
-      if (!Teuchos::is_null(newstate.U0) && newstate.U != U0_) {
+      if (!Teuchos::is_null(newstate.U0) && newstate.U0 != U0_) {
         // Assigned by the new state
         MVT::Assign(*newstate.U0, *U0_);
       }
@@ -399,7 +399,7 @@ namespace Belos {
     }
     else {
 
-      TEUCHOS_TEST_FOR_EXCEPTION(Teuchos::is_null(newstate.R),std::invalid_argument,
+      TEUCHOS_TEST_FOR_EXCEPTION(Teuchos::is_null(newstate.R0),std::invalid_argument,
                          "Belos::BiCGStabIterL::initialize(): BiCGStabStateIterState does not have initial residual.");
     }
 
@@ -433,23 +433,23 @@ namespace Belos {
     // Residuals
     std::vector<RCP<MV>> R(l_+1);
     for (int i = 0 ; i <= l_ ; ++i) {
-      R[i] = MVT::CloneCopy(*R0_, 1); // CC: only need R[0] = R0
+      R[i] = MVT::CloneCopy(*R0_); // CC: only need R[0] = R0
     }
 
     // U vectors
     std::vector<RCP<MV>> U(l_+1);
     for (int i = 0 ; i <= l_ ; ++i) {
-      U[i] = MVT::CloneCopy(*U0_, 1); // CC: only need U[0] = U0
+      U[i] = MVT::CloneCopy(*U0_); // CC: only need U[0] = U0
     }
     
     // Get the current solution std::vector.
     Teuchos::RCP<MV> X = lp_->getCurrLHSVec();
 
     // For the polynomial part
-    Teuchos::SerialSpdDenseSolver<int, ScalarType> z_solve;
-    Teuchos::SerialSymDenseMatrix<int, ScalarType> Z(l_);
-    Teuchos::SerialDenseMatrix<int, ScalarType> B(l_, 1);
-    Teuchos::SerialDenseMatrix<int, ScalarType> Y(l_, 1);
+    Teuchos::RCP<Teuchos::SerialSpdDenseSolver<int, ScalarType>> z_solve = Teuchos::rcp(new Teuchos::SerialSpdDenseSolver<int, ScalarType>());
+    Teuchos::RCP<Teuchos::SerialSymDenseMatrix<int, ScalarType>> Z = Teuchos::rcp(new Teuchos::SerialSymDenseMatrix<int, ScalarType>(l_));
+    Teuchos::RCP<Teuchos::SerialDenseMatrix<int, ScalarType>> B = Teuchos::rcp(new Teuchos::SerialDenseMatrix<int, ScalarType>(l_, 1));
+    Teuchos::RCP<Teuchos::SerialDenseMatrix<int, ScalarType>> Y = Teuchos::rcp(new Teuchos::SerialDenseMatrix<int, ScalarType>(l_, 1));
     
     ////////////////////////////////////////////////////////////////
     // Iterate until the status test tells us to stop.
@@ -500,16 +500,15 @@ namespace Belos {
       //------------------
       // Polynomial Part
 
-      Teuchos::SerialSymDenseMatrix<int, ScalarType> Z(l_);
       for (int i = 0 ; i < l_ ; ++i) {
 	for (int j = 0 ; j < i ; ++j ) {
 	  // Z[i,j] = <r_j, r_i> , (i,j) \in [1,l]
 	  MVT::MvDot(*(R[j+1]), *(R[i+1]), res);
-	  Z(i,j) = res[0] ;
+	  (*Z)(i,j) = res[0] ;
 	}
 	// Y[i] = <r_0, r_i>
 	MVT::MvDot(*(R[0]), *(R[i+1]), res);
-	B(i,0) = res[i];
+	(*B)(i,0) = res[i];
       }
 
       // y = Z\y
@@ -518,16 +517,17 @@ namespace Belos {
       z_solve->solve();
 
       // omega = Y[l]
-      omega_ = Y(l_-1, 0);
+      omega_ = (*Y)(l_-1, 0);
 
       // Update
       for (int i = 0 ; i < l_ ; ++i ){
+	ScalarType scale = (*Y)(i,0);
 	// u_0 = u_0 - y[i]u_i
-	MVT::MvAddMv(one, *(U[0]), -Y(i,0), *(U[i+1]), U[0]);
+	MVT::MvAddMv(one, *(U[0]), -scale, *(U[i+1]), *(U[0]));
 	// x = x + y[i] r_{i-1}
-	MVT::MvAddMv(one, *X, Y(i,0), *(R[i]), X);
+	MVT::MvAddMv(one, *X, scale, *(R[i]), *X);
 	// r_0 = r_0 - y[i] r_i
-       	MVT::MvAddMv(one, *(R[0]), -Y(i,0), *(R[i+1]), *(R[0]));
+       	MVT::MvAddMv(one, *(R[0]), -scale, *(R[i+1]), *(R[0]));
       }
 
       MVT::Assign(*(R[0]), *R0_);
