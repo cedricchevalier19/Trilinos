@@ -307,7 +307,7 @@ namespace Belos {
     numRHS_(0),
     initialized_(false),
     iter_(0),
-    l_(2)
+    l_(1)
   {
   }
 
@@ -492,8 +492,7 @@ namespace Belos {
 	}
 
 	// r_{j+1} = K\Ar_j
-	lp_->applyOp(*(U[j]), *(U[j+1]));
-	lp_->applyLeftPrec(*(R[j+1]), *(R[j+1]));
+	lp_->apply(*(R[j]), *(R[j+1]));
       }
 
       //------------------
