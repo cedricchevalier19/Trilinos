@@ -307,7 +307,7 @@ namespace Belos {
     numRHS_(0),
     initialized_(false),
     iter_(0),
-    l_(1)
+    l_(2)
   {
   }
 
@@ -423,7 +423,7 @@ namespace Belos {
     }
 
     // Allocate memory for scalars.
-    std::vector<ScalarType> res;
+    std::vector<ScalarType> res(1);
     ScalarType beta;
     ScalarType sigma;
     
@@ -461,7 +461,7 @@ namespace Belos {
       // rho_0 = - omega * rho_0
       rho_0_ *= (-omega_);
 
-      for (int j = 0 ; j < l_ - 1; j++) {
+      for (int j = 0 ; j < l_ ; j++) {
 	//rho_1 = <R_j, Rhat_>, rho_1 = res
         MVT::MvDot(*(R[j]), *Rhat_, res);
       
@@ -469,14 +469,13 @@ namespace Belos {
 	beta = (res[0] / rho_0_) * (alpha_);
         rho_0_ = res[0];
 	
-        for (int i = 0 ; i < j ; i++) {
+        for (int i = 0 ; i <= j ; i++) {
 	  // U_i = R_i - beta * U_i
 	  MVT::MvAddMv(one, *(R[i]), -beta, *(U[i]), *(U[i]));
         }
 
         // U_{j+1} = K\(A U_j)
-	lp_->applyOp(*(U[j+1]), *(U[j]));
-	lp_->applyLeftPrec(*(U[j+1]), *(U[j+1]));
+	lp_->apply(*(U[j]), *(U[j+1]));
 
 	// sigma = <U_{j+1}, Rhat_>
         MVT::MvDot(*(U[j+1]), *Rhat_, res);
@@ -487,13 +486,13 @@ namespace Belos {
 	// x = x + alpha*u_0
 	MVT::MvAddMv(one, *X, alpha_, *(U[0]), *X);
 
-	for (int  i = 0 ; i < j ; ++i ) {
+	for (int  i = 0 ; i <= j ; ++i ) {
 	  // R_i = R_i - alpha*U_{i+1}
 	  MVT::MvAddMv(one, *(R[i]), -alpha_, *(U[i+1]), *(R[i]));
 	}
 
 	// r_{j+1} = K\Ar_j
-	lp_->applyOp(*(U[j+1]), *(U[j]));
+	lp_->applyOp(*(U[j]), *(U[j+1]));
 	lp_->applyLeftPrec(*(R[j+1]), *(R[j+1]));
       }
 
@@ -501,7 +500,7 @@ namespace Belos {
       // Polynomial Part
 
       for (int i = 0 ; i < l_ ; ++i) {
-	for (int j = 0 ; j < i ; ++j ) {
+	for (int j = 0 ; j <= i ; ++j ) {
 	  // Z[i,j] = <r_j, r_i> , (i,j) \in [1,l]
 	  MVT::MvDot(*(R[j+1]), *(R[i+1]), res);
 	  (*Z)(i,j) = res[0] ;
