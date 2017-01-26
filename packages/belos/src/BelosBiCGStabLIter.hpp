@@ -307,7 +307,7 @@ namespace Belos {
     numRHS_(0),
     initialized_(false),
     iter_(0),
-    l_(1)
+    l_(2)
   {
   }
 
@@ -506,7 +506,7 @@ namespace Belos {
 	}
 	// Y[i] = <r_0, r_i>
 	MVT::MvDot(*(R[0]), *(R[i+1]), res);
-	(*B)(i,0) = res[i];
+	(*B)(i,0) = res[0];
       }
 
       // y = Z\y
