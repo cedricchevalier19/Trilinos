@@ -64,20 +64,14 @@
 #include "Teuchos_TimeMonitor.hpp"
 #endif
 
-/** \example BiCGStabL/BiCGStabLEpetraExFile.cpp
-    This is an example of how to use the Belos::BiCGStabLSolMgr solver manager.
-*/
-/** \example BiCGStabL/PseudoBlockPrecCGEpetraExFile.cpp
-    This is an example of how to use the Belos::BiCGStabLSolMgr solver manager with an Ifpack preconditioner.
-*/
 
 /*! \class Belos::BiCGStabLSolMgr
  *
- *  \brief The Belos::BiCGStabLSolMgr provides a powerful and fully-featured solver manager over the pseudo-block BiCGStabL iteration.
+ *  \brief The Belos::BiCGStabLSolMgr provides a powerful and fully-featured solver manager over the BiCGStabL iteration.
 
  \ingroup belos_solver_framework
 
- \author Alicia Klinvex
+ \author Cedric Chevalier
  */
 
 namespace Belos {
@@ -135,6 +129,7 @@ namespace Belos {
      *   - "Verbosity" - a sum of MsgType specifying the verbosity. Default: Belos::Errors
      *   - "Output Style" - a OutputType specifying the style of output. Default: Belos::General
      *   - "Convergence Tolerance" - a \c MagnitudeType specifying the level that residual norms must reach to decide convergence.
+     *   - "L" - degree of the polynome to use.
      */
     BiCGStabLSolMgr( const Teuchos::RCP<LinearProblem<ScalarType,MV,OP> > &problem,
                          const Teuchos::RCP<Teuchos::ParameterList> &pl );
@@ -284,11 +279,14 @@ namespace Belos {
     static const std::string resScale_default_;
     static const std::string label_default_;
     static const Teuchos::RCP<std::ostream> outputStream_default_;
+    static const int l_default_;
 
+    
     // Current solver values.
     MagnitudeType convtol_,achievedTol_;
     int maxIters_, numIters_;
     int verbosity_, outputStyle_, outputFreq_, defQuorum_;
+    int l_;
     bool showMaxResNormOnly_;
     std::string resScale_;
 
@@ -332,6 +330,9 @@ const std::string BiCGStabLSolMgr<ScalarType,MV,OP>::label_default_ = "Belos";
 template<class ScalarType, class MV, class OP>
 const Teuchos::RCP<std::ostream> BiCGStabLSolMgr<ScalarType,MV,OP>::outputStream_default_ = Teuchos::rcp(&std::cout,false);
 
+template<class ScalarType, class MV, class OP>
+const int BiCGStabLSolMgr<ScalarType,MV,OP>::l_default_ = 1;
+  
 // Empty Constructor
 template<class ScalarType, class MV, class OP>
 BiCGStabLSolMgr<ScalarType,MV,OP>::BiCGStabLSolMgr() :
@@ -346,7 +347,8 @@ BiCGStabLSolMgr<ScalarType,MV,OP>::BiCGStabLSolMgr() :
   showMaxResNormOnly_(showMaxResNormOnly_default_),
   resScale_(resScale_default_),
   label_(label_default_),
-  isSet_(false)
+  isSet_(false),
+  l_(l_default_)
 {}
 
 // Basic Constructor
@@ -366,7 +368,8 @@ BiCGStabLSolMgr (const Teuchos::RCP<LinearProblem<ScalarType,MV,OP> > &problem,
   showMaxResNormOnly_(showMaxResNormOnly_default_),
   resScale_(resScale_default_),
   label_(label_default_),
-  isSet_(false)
+  isSet_(false),
+  l_(l_default_)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(
     problem_.is_null (), std::invalid_argument,
@@ -405,6 +408,15 @@ void BiCGStabLSolMgr<ScalarType,MV,OP>::setParameters( const Teuchos::RCP<Teucho
     if (maxIterTest_!=Teuchos::null)
       maxIterTest_->setMaxIters( maxIters_ );
   }
+
+  // Check for maximum number of iterations
+  if (params->isParameter("L")) {
+    l_ = params->get("L", l_default_);
+
+    // Update parameter in our list.
+    params_->set("L", l_);
+  }
+
 
   // Check to see if the timer label changed.
   if (params->isParameter("Timer Label")) {
@@ -574,7 +586,7 @@ void BiCGStabLSolMgr<ScalarType,MV,OP>::setParameters( const Teuchos::RCP<Teucho
     outputTest_ = stoFactory.create( printer_, sTest_, outputFreq_, Passed+Failed+Undefined );
 
     // Set the solver string for the output test
-    std::string solverDesc = " Pseudo Block BiCGStabL ";
+    std::string solverDesc = "BiCGStabL ";
     outputTest_->setSolverDesc( solverDesc );
 
   }
@@ -639,6 +651,8 @@ BiCGStabLSolMgr<ScalarType,MV,OP>::getValidParameters() const
             "name is deprecated; the new name is \"Implicit Residual Scaling\".");
     pl->set("Timer Label", label_default_,
       "The string to use as a prefix for the timer labels.");
+    pl->set("L", l_default_, "The l parameter of BiCGStab(l)");
+
     //  defaultParams_->set("Restart Timers", restartTimers_);
     validParams_ = pl;
   }
@@ -688,6 +702,9 @@ ReturnType BiCGStabLSolMgr<ScalarType,MV,OP>::solve ()
   // Parameter list (iteration)
   Teuchos::ParameterList plist;
 
+
+  plist.set("L", l_);
+  
   // Reset the status test.
   outputTest_->reset();
 

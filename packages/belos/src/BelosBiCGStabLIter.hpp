@@ -310,6 +310,8 @@ namespace Belos {
     iter_(0),
     l_(2)
   {
+
+    l_ = params.get("L", 2);
   }
 
 
@@ -322,7 +324,7 @@ namespace Belos {
     Teuchos::RCP<const MV> lhsMV = lp_->getCurrLHSVec();
     Teuchos::RCP<const MV> rhsMV = lp_->getCurrRHSVec();
     TEUCHOS_TEST_FOR_EXCEPTION((lhsMV==Teuchos::null && rhsMV==Teuchos::null),std::invalid_argument,
-                       "Belos::BiCGStabIter::initialize(): Cannot initialize state storage!");
+                       "Belos::BiCGStabLIter::initialize(): Cannot initialize state storage!");
 
     // Get the multivector that is not null.
     Teuchos::RCP<const MV> tmp = ( (rhsMV!=Teuchos::null)? rhsMV: lhsMV );
