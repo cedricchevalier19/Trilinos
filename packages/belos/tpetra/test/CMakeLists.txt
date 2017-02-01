@@ -12,6 +12,7 @@ IF(${PACKAGE_NAME}_ENABLE_Experimental)
   # At the moment, all the tests in this subdirectory depend on
   # experimental code.
   ADD_SUBDIRECTORY(BlockGCRODR)
+  ADD_SUBDIRECTORY(BiCGStabL)
 ENDIF() # ${PACKAGE_NAME}_ENABLE_Experimental
 
 TRIBITS_ADD_EXECUTABLE_AND_TEST(

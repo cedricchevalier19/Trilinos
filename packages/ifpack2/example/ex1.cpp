@@ -121,7 +121,7 @@ main (int argc, char* argv[])
   RCP<ParameterList> solverParams (new ParameterList ());
   {
     Belos::SolverFactory<scalar_type, MV, OP> belosFactory;
-    solver = belosFactory.create ("GMRES", solverParams);
+    solver = belosFactory.create ("BICGSTABL", solverParams);
   }
   if (solver.is_null ()) {
     if (comm->getRank () == 0) {
