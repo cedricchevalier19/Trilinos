@@ -538,8 +538,8 @@ namespace Belos {
 
       //------------------
       // Polynomial Part
-      //Y = polysolver.minresPolynomial();
-      Y = polysolver.convexCombiPolynomial();
+      Y = polysolver.minresPolynomial();
+      //Y = polysolver.convexCombiPolynomial();
 
 
       omega_ = (*Y)(l_-1);
@@ -585,8 +585,40 @@ namespace Belos {
   BiCGStabLPolynomialPart<ScalarType, MV, OP>::minresPolynomial()
   {
     _buildOperator();
-    //    _solveMinRes();
+    _setB0();
+    _setBL();
 
+    std::vector<ScalarType> res(1);
+
+    // Compute auxiliary dot products
+    ScalarType blb0 = _BL->dot(*_B0);
+    
+    ScalarType r0rl;
+    ScalarType r0r0;
+    ScalarType rlrl;
+
+    MVT::MvDot(*(_R[0]), *(_R[0]), res);
+    r0r0= res[0];
+
+    MVT::MvDot(*(_R[_l]), *(_R[0]), res);
+    r0rl = res[0];
+    
+    MVT::MvDot(*(_R[_l]), *(_R[_l]), res);
+    rlrl = res[0];
+
+    ScalarType omega = (r0rl - blb0)/rlrl;
+
+    (*_BL) *= omega;
+    (*_B0) -= (*_BL);
+    
+    _z_solve->setVectors(_Y0, _B0);
+    _z_solve->solve();
+
+    for (int i = 0 ; i < _l-1 ; ++i) {
+      (*_out)(i) = (*_Y0)(i);
+    }
+    (*_out)(_l-1) = omega;
+    
     return _out;
   }
 
