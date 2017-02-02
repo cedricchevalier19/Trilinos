@@ -126,9 +126,9 @@ namespace Belos {
     public:
       BiCGStabLPolynomialPart(std::vector<Teuchos::RCP<MV>> R);
 
-      RCPLVector minresPolynomial();
-      RCPLVector orthoPolynomial();
-      RCPLVector convexCombiPolynomial();
+      RCPLVector minresPolynomial(ScalarType& omega);
+      RCPLVector orthoPolynomial(ScalarType& omega);
+      RCPLVector convexCombiPolynomial(ScalarType& omega);
 
     private:
       void _buildOperator();
@@ -537,23 +537,25 @@ namespace Belos {
 
       //------------------
       // Polynomial Part
-      Y = polysolver.minresPolynomial();
-      //      Y = polysolver.convexCombiPolynomial();
+      //Y = polysolver.minresPolynomial();
+      Y = polysolver.convexCombiPolynomial(omega_);
 
       //-----------------
       // Update
 
-      // omega = Y[l]
-      omega_ = (*Y)(l_-1);
-
+      std::vector<ScalarType> scale(l_);
+      for (int i = 0 ; i < l_-1 ; ++i ){
+	scale[i] = (*Y)(i);
+      }
+      scale[l_-1] = omega_;
+      
       for (int i = 0 ; i < l_ ; ++i ){
-	ScalarType scale = (*Y)(i);
 	// u_0 = u_0 - y[i]u_i
-	MVT::MvAddMv(one, *(U[0]), -scale, *(U[i+1]), *(U[0]));
+	MVT::MvAddMv(one, *(U[0]), -scale[i], *(U[i+1]), *(U[0]));
 	// x = x + y[i] r_{i-1}
-	MVT::MvAddMv(one, *X, scale, *(R[i]), *X);
+	MVT::MvAddMv(one, *X, scale[i], *(R[i]), *X);
 	// r_0 = r_0 - y[i] r_i
-	MVT::MvAddMv(one, *(R[0]), -scale, *(R[i+1]), *(R[0]));
+	MVT::MvAddMv(one, *(R[0]), -scale[i], *(R[i+1]), *(R[0]));
       }
 
       MVT::Assign(*(R[0]), *R0_);
@@ -570,17 +572,17 @@ namespace Belos {
     , _l(R.size()-1)
     , _z_solve(Teuchos::rcp(new Teuchos::SerialSpdDenseSolver<int, ScalarType>()))
   {
-    _Z = Teuchos::rcp(new Teuchos::SerialSymDenseMatrix<int, ScalarType>(_l));
-    _B0 = Teuchos::rcp(new LVector(_l));
-    _BL = Teuchos::rcp(new LVector(_l));
-    _Y0 = Teuchos::rcp(new LVector(_l));
-    _YL = Teuchos::rcp(new LVector(_l));
+    _Z = Teuchos::rcp(new Teuchos::SerialSymDenseMatrix<int, ScalarType>(_l-1));
+    _B0 = Teuchos::rcp(new LVector(_l-1));
+    _BL = Teuchos::rcp(new LVector(_l-1));
+    _Y0 = Teuchos::rcp(new LVector(_l-1));
+    _YL = Teuchos::rcp(new LVector(_l-1));
   }
 
 
   template<class ScalarType, class MV, class OP>
   typename BiCGStabLPolynomialPart<ScalarType, MV, OP>::RCPLVector
-  BiCGStabLPolynomialPart<ScalarType, MV, OP>::minresPolynomial()
+  BiCGStabLPolynomialPart<ScalarType, MV, OP>::minresPolynomial(ScalarType& omega)
   {
     _buildOperator();
     _solveMinRes();
@@ -591,7 +593,7 @@ namespace Belos {
 
   template<class ScalarType, class MV, class OP>
   typename BiCGStabLPolynomialPart<ScalarType, MV, OP>::RCPLVector
-  BiCGStabLPolynomialPart<ScalarType, MV, OP>::orthoPolynomial()
+  BiCGStabLPolynomialPart<ScalarType, MV, OP>::orthoPolynomial(ScalarType& omega)
   {
     _buildOperator();
     _solveOrtho();
@@ -601,12 +603,14 @@ namespace Belos {
 
   template<class ScalarType, class MV, class OP>
   typename BiCGStabLPolynomialPart<ScalarType, MV, OP>::RCPLVector
-  BiCGStabLPolynomialPart<ScalarType, MV, OP>::convexCombiPolynomial()
+  BiCGStabLPolynomialPart<ScalarType, MV, OP>::convexCombiPolynomial(ScalarType& omega)
   {
     _buildOperator();
     _solveMinRes();
     _solveOrtho();
 
+    _buildOperator();
+    
     const ScalarType one = Teuchos::ScalarTraits<ScalarType>::one();
     const ScalarType zero = Teuchos::ScalarTraits<ScalarType>::zero();
 
@@ -615,7 +619,6 @@ namespace Belos {
     ScalarType rho;
 
     // temporary variables used to fit Teuchos/numerics API
-    Teuchos::SerialSymDenseMatrix<int, ScalarType> m_kappa(1,1);
     std::vector<ScalarType> res(1);
     ScalarType kappal0;
 
@@ -625,33 +628,34 @@ namespace Belos {
     ScalarType ylb0 = _YL->dot(*_B0);
     ScalarType ylbl = _YL->dot(*_BL);
 
+
     // kappa0 = sqrt(Y0p*Zp Y0p)
-    Teuchos::symMatTripleProduct(Teuchos::TRANS, one, *_Z, *_Y0, m_kappa);
     MVT::MvDot(*(_R[0]), *(_R[0]), res);
-    kappa0 = m_kappa(0,0) - 2*y0b0 + res[0];
+    kappa0 = res[0] - y0b0;
+    std::cout << "kappa0 = " << kappa0 << std::endl;
     kappa0 = Teuchos::ScalarTraits<ScalarType>::squareroot(kappa0);
 
     // kappal = sqrt(Ylp*Zp Ylp)
-    Teuchos::symMatTripleProduct(Teuchos::TRANS, one, *_Z, *_YL, m_kappa);
     MVT::MvDot(*(_R[_l]), *(_R[_l]), res);
-    kappal = m_kappa(0,0) - 2*ylbl + res[0];
+    kappal = res[0] - ylbl;
+    std::cout << "kappal = " << kappal << std::endl;
     kappal = Teuchos::ScalarTraits<ScalarType>::squareroot(kappal);
 
     // kappal0 = Ylp*Zp Y0p
-    LVector tmp(_l);
+
     // m_kappa = 0*m_kappa + Z*Y0
-    tmp.multiply(Teuchos::LEFT_SIDE, one, *_Z, *_Y0, zero);
-    kappal0 = tmp.dot(*_YL);
     MVT::MvDot(*(_R[0]), *(_R[_l]), res);
-    kappal0 += res[0] - y0bl - ylb0;
+    kappal0 = res[0] - y0bl;
 
     rho = kappal0 / (kappa0*kappal);
 
     ScalarType gamma = rho/std::abs(rho) * std::max(std::abs(rho), 0.7);
 
-    tmp = (*_YL);
-    tmp *= gamma*kappa0/kappal;
+    LVector tmp(*_YL);
+    omega = gamma*kappa0/kappal; 
+    tmp *= omega;
     (*_Y0) -= tmp;
+
     return _Y0;
   }
 
@@ -660,11 +664,12 @@ namespace Belos {
   {
     std::vector<ScalarType> res(1);
 
-    for (int i = 0 ; i < _l ; ++i) {
+    for (int i = 0 ; i < _l - 1 ; ++i) {
       for (int j = 0 ; j <= i ; ++j ) {
 	// Z[i,j] = <r_j, r_i> , (i,j) \in [1,l]
 	MVT::MvDot(*(_R[j+1]), *(_R[i+1]), res);
 	(*_Z)(i,j) = res[0] ;
+	std::cout << "z[" << i << "," << j <<"]=" << res[0] << std::endl;
       }
     }
     _z_solve->setMatrix(_Z);
@@ -675,19 +680,23 @@ namespace Belos {
   void BiCGStabLPolynomialPart<ScalarType, MV, OP>::_solveMinRes()
   {
     std::vector<ScalarType> res(1);
-    for (int i = 0 ; i < _l ; i++) {
+    for (int i = 0 ; i < _l - 1 ; i++) {
       MVT::MvDot(*(_R[i+1]), *(_R[0]), res);
       (*_B0)(i) = res[0];
+      std::cout << "b0[" << i << "]=" << res[0] << std::endl;
     }
     _z_solve->setVectors(_Y0, _B0);
     _z_solve->solve();
+    for (int i = 0 ; i < _l - 1 ; i++) {
+      std::cout << "y0[" << i << "]=" << (*_Y0)(i) << std::endl;
+    }
   }
 
   template<class ScalarType, class MV, class OP>
   void BiCGStabLPolynomialPart<ScalarType, MV, OP>::_solveOrtho()
   {
     std::vector<ScalarType> res(1);
-    for (int i = 0 ; i < _l ; i++) {
+    for (int i = 0 ; i < _l - 1 ; i++) {
       MVT::MvDot(*(_R[i+1]), *(_R[_l]), res);
       (*_BL)(i) = res[0];
     }
