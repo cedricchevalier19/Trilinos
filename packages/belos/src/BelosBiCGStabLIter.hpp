@@ -110,6 +110,42 @@ namespace Belos {
     }
   };
 
+
+
+    /// Polynomial computation
+    template<class ScalarType, class MV, class OP>
+    class BiCGStabLPolynomialPart
+    {
+    public:
+      typedef MultiVecTraits<ScalarType,MV> MVT;
+      typedef Teuchos::RCP<Teuchos::SerialDenseMatrix<int, ScalarType>> RCPLVector;
+
+    public:
+      BiCGStabLPolynomialPart(std::vector<Teuchos::RCP<MV>> R);
+
+      RCPLVector minresPolynomial();
+      RCPLVector orthoPolynomial();
+      RCPLVector convexCombiPolynomial();
+
+    private:
+      void _buildOperator();
+      void _solveMinRes();
+      void _solveOrtho();
+
+    private:
+      std::vector<Teuchos::RCP<MV>> _R;
+      int _l;
+      // We keep the dense objects in memory.
+      Teuchos::RCP<Teuchos::SerialSpdDenseSolver<int, ScalarType>> _z_solve;
+      Teuchos::RCP<Teuchos::SerialSymDenseMatrix<int, ScalarType>> _Z;
+      RCPLVector _B0;
+      RCPLVector _BL;
+      RCPLVector _Y0;
+      RCPLVector _YL;
+    };
+
+
+
   template<class ScalarType, class MV, class OP>
   class BiCGStabLIter : virtual public Iteration<ScalarType,MV,OP> {
 
@@ -132,9 +168,9 @@ namespace Belos {
      * to a parameter list of options for the linear solver.
      */
     BiCGStabLIter( const Teuchos::RCP<LinearProblem<ScalarType,MV,OP> > &problem,
-                          const Teuchos::RCP<OutputManager<ScalarType> > &printer,
-                          const Teuchos::RCP<StatusTest<ScalarType,MV,OP> > &tester,
-                          Teuchos::ParameterList &params );
+			  const Teuchos::RCP<OutputManager<ScalarType> > &printer,
+			  const Teuchos::RCP<StatusTest<ScalarType,MV,OP> > &tester,
+			  Teuchos::ParameterList &params );
 
     //! Destructor.
     virtual ~BiCGStabLIter() {};
@@ -245,7 +281,7 @@ namespace Belos {
     //! \brief Set the blocksize.
     void setBlockSize(int blockSize) {
       TEUCHOS_TEST_FOR_EXCEPTION(blockSize!=1,std::invalid_argument,
-                         "Belos::BiCGStabIter::setBlockSize(): Cannot use a block size that is not one.");
+			 "Belos::BiCGStabIter::setBlockSize(): Cannot use a block size that is not one.");
     }
 
     //! States whether the solver has been initialized or not.
@@ -299,9 +335,9 @@ namespace Belos {
   // Constructor.
   template<class ScalarType, class MV, class OP>
   BiCGStabLIter<ScalarType,MV,OP>::BiCGStabLIter(const Teuchos::RCP<LinearProblem<ScalarType,MV,OP> > &problem,
-                                                               const Teuchos::RCP<OutputManager<ScalarType> > &printer,
-                                                               const Teuchos::RCP<StatusTest<ScalarType,MV,OP> > &tester,
-                                                               Teuchos::ParameterList &params ):
+							       const Teuchos::RCP<OutputManager<ScalarType> > &printer,
+							       const Teuchos::RCP<StatusTest<ScalarType,MV,OP> > &tester,
+							       Teuchos::ParameterList &params ):
     lp_(problem),
     om_(printer),
     stest_(tester),
@@ -324,7 +360,7 @@ namespace Belos {
     Teuchos::RCP<const MV> lhsMV = lp_->getCurrLHSVec();
     Teuchos::RCP<const MV> rhsMV = lp_->getCurrRHSVec();
     TEUCHOS_TEST_FOR_EXCEPTION((lhsMV==Teuchos::null && rhsMV==Teuchos::null),std::invalid_argument,
-                       "Belos::BiCGStabLIter::initialize(): Cannot initialize state storage!");
+		       "Belos::BiCGStabLIter::initialize(): Cannot initialize state storage!");
 
     // Get the multivector that is not null.
     Teuchos::RCP<const MV> tmp = ( (rhsMV!=Teuchos::null)? rhsMV: lhsMV );
@@ -335,7 +371,7 @@ namespace Belos {
 
     if (numRHS_ != 1)
       throw "Too many RHS";
-    
+
     // Initialize the state storage
     // If the subspace has not be initialized before or has changed sizes, generate it using the LHS or RHS from lp_.
     if (Teuchos::is_null(R0_) || MVT::GetNumberVecs(*R0_)!=numRHS_) {
@@ -354,41 +390,41 @@ namespace Belos {
     if (!Teuchos::is_null(newstate.R0)) {
 
       TEUCHOS_TEST_FOR_EXCEPTION( MVT::GetGlobalLength(*newstate.R0) != MVT::GetGlobalLength(*R0_),
-                          std::invalid_argument, errstr );
+			  std::invalid_argument, errstr );
       TEUCHOS_TEST_FOR_EXCEPTION( MVT::GetNumberVecs(*newstate.R0) != numRHS_,
-                          std::invalid_argument, errstr );
+			  std::invalid_argument, errstr );
 
       // Copy residual vectors from newstate into R
       if (newstate.R0 != R0_) {
-        // Assigned by the new state
-        MVT::Assign(*newstate.R0, *R0_);
+	// Assigned by the new state
+	MVT::Assign(*newstate.R0, *R0_);
       }
       else {
-        // Computed
-        lp_->computeCurrResVec(R0_.get());
+	// Computed
+	lp_->computeCurrResVec(R0_.get());
       }
 
       // Set Rhat
       if (!Teuchos::is_null(newstate.Rhat) && newstate.Rhat != Rhat_) {
-        // Assigned by the new state
-        MVT::Assign(*newstate.Rhat, *Rhat_);
+	// Assigned by the new state
+	MVT::Assign(*newstate.Rhat, *Rhat_);
       }
       else {
-        // Set to be the initial residual
-        MVT::Assign(*lp_->getInitResVec(), *Rhat_);
+	// Set to be the initial residual
+	MVT::Assign(*lp_->getInitResVec(), *Rhat_);
       }
 
       // Set U0
       if (!Teuchos::is_null(newstate.U0) && newstate.U0 != U0_) {
-        // Assigned by the new state
-        MVT::Assign(*newstate.U0, *U0_);
+	// Assigned by the new state
+	MVT::Assign(*newstate.U0, *U0_);
       }
       else {
-        // Initial V = 0
-        MVT::MvInit(*U0_);
+	// Initial V = 0
+	MVT::MvInit(*U0_);
       }
 
- 
+
       // Set rho_old
       rho_0_ = newstate.rho_0;
 
@@ -403,7 +439,7 @@ namespace Belos {
     else {
 
       TEUCHOS_TEST_FOR_EXCEPTION(Teuchos::is_null(newstate.R0),std::invalid_argument,
-                         "Belos::BiCGStabIterL::initialize(): BiCGStabStateIterState does not have initial residual.");
+			 "Belos::BiCGStabIterL::initialize(): BiCGStabStateIterState does not have initial residual.");
     }
 
     // The solver is initialized
@@ -429,7 +465,7 @@ namespace Belos {
     std::vector<ScalarType> res(1);
     ScalarType beta;
     ScalarType sigma;
-    
+
     // Create convenience variable for one.
     const ScalarType one = Teuchos::ScalarTraits<ScalarType>::one();
 
@@ -444,16 +480,15 @@ namespace Belos {
     for (int i = 0 ; i <= l_ ; ++i) {
       U[i] = MVT::CloneCopy(*U0_); // CC: only need U[0] = U0
     }
-    
+
     // Get the current solution std::vector.
     Teuchos::RCP<MV> X = lp_->getCurrLHSVec();
 
     // For the polynomial part
-    Teuchos::RCP<Teuchos::SerialSpdDenseSolver<int, ScalarType>> z_solve = Teuchos::rcp(new Teuchos::SerialSpdDenseSolver<int, ScalarType>());
-    Teuchos::RCP<Teuchos::SerialSymDenseMatrix<int, ScalarType>> Z = Teuchos::rcp(new Teuchos::SerialSymDenseMatrix<int, ScalarType>(l_));
-    Teuchos::RCP<Teuchos::SerialDenseMatrix<int, ScalarType>> B = Teuchos::rcp(new Teuchos::SerialDenseMatrix<int, ScalarType>(l_, 1));
-    Teuchos::RCP<Teuchos::SerialDenseMatrix<int, ScalarType>> Y = Teuchos::rcp(new Teuchos::SerialDenseMatrix<int, ScalarType>(l_, 1));
-    
+    BiCGStabLPolynomialPart<ScalarType, MV, OP> polysolver(R);
+    Teuchos::RCP<Teuchos::SerialDenseMatrix<int, ScalarType>> Y;
+
+
     ////////////////////////////////////////////////////////////////
     // Iterate until the status test tells us to stop.
     //
@@ -466,26 +501,26 @@ namespace Belos {
 
       for (int j = 0 ; j < l_ ; j++) {
 	//rho_1 = <R_j, Rhat_>, rho_1 = res
-        MVT::MvDot(*(R[j]), *Rhat_, res);
-      
-        // beta = ( rho_1 / rho_0 ) (alpha)
+	MVT::MvDot(*(R[j]), *Rhat_, res);
+
+	// beta = ( rho_1 / rho_0 ) (alpha)
 	beta = (res[0] / rho_0_) * (alpha_);
-        rho_0_ = res[0];
-	
-        for (int i = 0 ; i <= j ; i++) {
+	rho_0_ = res[0];
+
+	for (int i = 0 ; i <= j ; i++) {
 	  // U_i = R_i - beta * U_i
 	  MVT::MvAddMv(one, *(R[i]), -beta, *(U[i]), *(U[i]));
-        }
+	}
 
-        // U_{j+1} = K\(A U_j)
+	// U_{j+1} = K\(A U_j)
 	lp_->apply(*(U[j]), *(U[j+1]));
 
 	// sigma = <U_{j+1}, Rhat_>
-        MVT::MvDot(*(U[j+1]), *Rhat_, res);
+	MVT::MvDot(*(U[j+1]), *Rhat_, res);
 	// alpha = rho_1 / sigma
 	// CC: here rho_0 == rho_1
 	alpha_ = rho_0_ / res[0];
-	
+
 	// x = x + alpha*u_0
 	MVT::MvAddMv(one, *X, alpha_, *(U[0]), *X);
 
@@ -500,27 +535,15 @@ namespace Belos {
 
       //------------------
       // Polynomial Part
+      Y = polysolver.minresPolynomial();
 
-      for (int i = 0 ; i < l_ ; ++i) {
-	for (int j = 0 ; j <= i ; ++j ) {
-	  // Z[i,j] = <r_j, r_i> , (i,j) \in [1,l]
-	  MVT::MvDot(*(R[j+1]), *(R[i+1]), res);
-	  (*Z)(i,j) = res[0] ;
-	}
-	// Y[i] = <r_0, r_i>
-	MVT::MvDot(*(R[0]), *(R[i+1]), res);
-	(*B)(i,0) = res[0];
-      }
 
-      // y = Z\y
-      z_solve->setMatrix(Z);
-      z_solve->setVectors(Y, B);
-      z_solve->solve();
+      //-----------------
+      // Update
 
       // omega = Y[l]
       omega_ = (*Y)(l_-1, 0);
 
-      // Update
       for (int i = 0 ; i < l_ ; ++i ){
 	ScalarType scale = (*Y)(i,0);
 	// u_0 = u_0 - y[i]u_i
@@ -528,13 +551,99 @@ namespace Belos {
 	// x = x + y[i] r_{i-1}
 	MVT::MvAddMv(one, *X, scale, *(R[i]), *X);
 	// r_0 = r_0 - y[i] r_i
-       	MVT::MvAddMv(one, *(R[0]), -scale, *(R[i+1]), *(R[0]));
+	MVT::MvAddMv(one, *(R[0]), -scale, *(R[i+1]), *(R[0]));
       }
 
       MVT::Assign(*(R[0]), *R0_);
       MVT::Assign(*(U[0]), *U0_);
     } // end while (sTest_->checkStatus(this) != Passed)
   }
+
+
+    /// Polynomial computation
+  template<class ScalarType, class MV, class OP>
+  BiCGStabLPolynomialPart<ScalarType, MV, OP>
+  ::BiCGStabLPolynomialPart(std::vector<Teuchos::RCP<MV>> R)
+    : _R(R)
+    , _l(R.size()-1)
+    , _z_solve(Teuchos::rcp(new Teuchos::SerialSpdDenseSolver<int, ScalarType>()))
+  {
+    _Z = Teuchos::rcp(new Teuchos::SerialSymDenseMatrix<int, ScalarType>(_l));
+    _B0 = Teuchos::rcp(new Teuchos::SerialDenseMatrix<int, ScalarType>(_l, 1));
+    _BL = Teuchos::rcp(new Teuchos::SerialDenseMatrix<int, ScalarType>(_l, 1));
+    _Y0 = Teuchos::rcp(new Teuchos::SerialDenseMatrix<int, ScalarType>(_l, 1));
+    _YL = Teuchos::rcp(new Teuchos::SerialDenseMatrix<int, ScalarType>(_l, 1));
+  }
+
+
+  template<class ScalarType, class MV, class OP>
+  Teuchos::RCP<Teuchos::SerialDenseMatrix<int, ScalarType>>
+  BiCGStabLPolynomialPart<ScalarType, MV, OP>::minresPolynomial()
+  {
+    _buildOperator();
+    _solveMinRes();
+
+    return _Y0;
+  }
+
+
+  template<class ScalarType, class MV, class OP>
+  Teuchos::RCP<Teuchos::SerialDenseMatrix<int, ScalarType>>
+  BiCGStabLPolynomialPart<ScalarType, MV, OP>::orthoPolynomial()
+  {
+    _buildOperator();
+    _solveOrtho();
+
+    return _YL;
+  }
+
+  template<class ScalarType, class MV, class OP>
+  Teuchos::RCP<Teuchos::SerialDenseMatrix<int, ScalarType>>
+  BiCGStabLPolynomialPart<ScalarType, MV, OP>::convexCombiPolynomial()
+  {
+    return _Y0;
+  }
+
+  template<class ScalarType, class MV, class OP>
+  void BiCGStabLPolynomialPart<ScalarType, MV, OP>::_buildOperator()
+  {
+    std::vector<ScalarType> res(1);
+
+    for (int i = 0 ; i < _l ; ++i) {
+      for (int j = 0 ; j <= i ; ++j ) {
+	// Z[i,j] = <r_j, r_i> , (i,j) \in [1,l]
+	MVT::MvDot(*(_R[j+1]), *(_R[i+1]), res);
+	(*_Z)(i,j) = res[0] ;
+      }
+    }
+    _z_solve->setMatrix(_Z);
+    _z_solve->factor();
+  }
+
+  template<class ScalarType, class MV, class OP>
+  void BiCGStabLPolynomialPart<ScalarType, MV, OP>::_solveMinRes()
+  {
+    std::vector<ScalarType> res(1);
+    for (int i = 0 ; i < _l ; i++) {
+      MVT::MvDot(*(_R[i+1]), *(_R[0]), res);
+      (*_B0)(i,0) = res[0];
+    }
+    _z_solve->setVectors(_Y0, _B0);
+    _z_solve->solve();
+  }
+
+  template<class ScalarType, class MV, class OP>
+  void BiCGStabLPolynomialPart<ScalarType, MV, OP>::_solveOrtho()
+  {
+    std::vector<ScalarType> res(1);
+    for (int i = 0 ; i < _l ; i++) {
+      MVT::MvDot(*(_R[i+1]), *(_R[_l]), res);
+      (*_BL)(i,0) = res[0];
+    }
+    _z_solve->setVectors(_YL, _BL);
+    _z_solve->solve();
+  }
+
 
 } // end Belos namespace
 
