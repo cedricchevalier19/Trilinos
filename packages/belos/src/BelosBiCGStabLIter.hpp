@@ -388,9 +388,6 @@ namespace Belos {
     //
     std::string errstr("Belos::BlockPseudoCGIter::initialize(): Specified multivectors must have a consistent length and width.");
 
-    // Create convenience variable for one.
-    const ScalarType one = Teuchos::ScalarTraits<ScalarType>::one();
-
     if (!Teuchos::is_null(newstate.R0)) {
 
       TEUCHOS_TEST_FOR_EXCEPTION( MVT::GetGlobalLength(*newstate.R0) != MVT::GetGlobalLength(*R0_),
@@ -468,7 +465,6 @@ namespace Belos {
     // Allocate memory for scalars.
     std::vector<ScalarType> res(1);
     ScalarType beta;
-    ScalarType sigma;
 
     // Create convenience variable for one.
     const ScalarType one = Teuchos::ScalarTraits<ScalarType>::one();
@@ -636,7 +632,6 @@ namespace Belos {
     ScalarType y0b0 = Teuchos::ScalarTraits<ScalarType>::zero();
     ScalarType y0bl = Teuchos::ScalarTraits<ScalarType>::zero();
     ScalarType ylbl = Teuchos::ScalarTraits<ScalarType>::zero();
-    ScalarType ylb0 = Teuchos::ScalarTraits<ScalarType>::zero();
 
     if (_l > 1) {
       _buildOperator();
@@ -650,7 +645,6 @@ namespace Belos {
 
       y0b0 = _Y0->dot(*_B0);
       y0bl = _Y0->dot(*_BL);
-      ylb0 = _YL->dot(*_B0);
       ylbl = _YL->dot(*_BL);
     }
 

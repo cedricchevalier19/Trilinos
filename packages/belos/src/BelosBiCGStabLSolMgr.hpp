@@ -344,11 +344,11 @@ BiCGStabLSolMgr<ScalarType,MV,OP>::BiCGStabLSolMgr() :
   outputStyle_(outputStyle_default_),
   outputFreq_(outputFreq_default_),
   defQuorum_(defQuorum_default_),
+  l_(l_default_),
   showMaxResNormOnly_(showMaxResNormOnly_default_),
   resScale_(resScale_default_),
   label_(label_default_),
-  isSet_(false),
-  l_(l_default_)
+  isSet_(false)
 {}
 
 // Basic Constructor
