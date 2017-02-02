@@ -538,15 +538,15 @@ namespace Belos {
 
       //------------------
       // Polynomial Part
-      Y = polysolver.minresPolynomial();
-      //Y = polysolver.convexCombiPolynomial();
+      //Y = polysolver.minresPolynomial();
+      Y = polysolver.convexCombiPolynomial();
 
 
       omega_ = (*Y)(l_-1);
       //-----------------
       // Update
 
-      
+
       for (int i = 0 ; i < l_ ; ++i ){
 	ScalarType scale = (*Y)(i);
 	// u_0 = u_0 - y[i]u_i
@@ -584,41 +584,37 @@ namespace Belos {
   typename BiCGStabLPolynomialPart<ScalarType, MV, OP>::RCPLVector
   BiCGStabLPolynomialPart<ScalarType, MV, OP>::minresPolynomial()
   {
-    _buildOperator();
-    _setB0();
-    _setBL();
-
     std::vector<ScalarType> res(1);
-
-    // Compute auxiliary dot products
-    ScalarType blb0 = _BL->dot(*_B0);
-    
-    ScalarType r0rl;
-    ScalarType r0r0;
-    ScalarType rlrl;
-
-    MVT::MvDot(*(_R[0]), *(_R[0]), res);
-    r0r0= res[0];
-
     MVT::MvDot(*(_R[_l]), *(_R[0]), res);
-    r0rl = res[0];
-    
+    ScalarType r0rl = res[0];
+
     MVT::MvDot(*(_R[_l]), *(_R[_l]), res);
-    rlrl = res[0];
+    ScalarType rlrl = res[0];
+
+    ScalarType blb0 = Teuchos::ScalarTraits<ScalarType>::zero();
+
+    if (_l > 1) {
+      _buildOperator();
+      _setB0();
+      _setBL();
+      blb0 = _BL->dot(*_B0);
+    }
 
     ScalarType omega = (r0rl - blb0)/rlrl;
 
-    (*_BL) *= omega;
-    (*_B0) -= (*_BL);
-    
-    _z_solve->setVectors(_Y0, _B0);
-    _z_solve->solve();
+    if (_l > 1) {
+      (*_BL) *= omega;
+      (*_B0) -= (*_BL);
 
-    for (int i = 0 ; i < _l-1 ; ++i) {
-      (*_out)(i) = (*_Y0)(i);
+      _z_solve->setVectors(_Y0, _B0);
+      _z_solve->solve();
+
+      for (int i = 0 ; i < _l-1 ; ++i) {
+	(*_out)(i) = (*_Y0)(i);
+      }
     }
     (*_out)(_l-1) = omega;
-    
+
     return _out;
   }
 
@@ -636,15 +632,28 @@ namespace Belos {
   typename BiCGStabLPolynomialPart<ScalarType, MV, OP>::RCPLVector
   BiCGStabLPolynomialPart<ScalarType, MV, OP>::convexCombiPolynomial()
   {
-    _buildOperator();
-    _setB0();
-    _z_solve->setVectors(_Y0, _B0);
-    _z_solve->solve();
-    
-    _setBL();
-    _z_solve->setVectors(_YL, _BL);
-    _z_solve->solve();
-    
+    // Compute auxiliary dot products
+    ScalarType y0b0 = Teuchos::ScalarTraits<ScalarType>::zero();
+    ScalarType y0bl = Teuchos::ScalarTraits<ScalarType>::zero();
+    ScalarType ylbl = Teuchos::ScalarTraits<ScalarType>::zero();
+    ScalarType ylb0 = Teuchos::ScalarTraits<ScalarType>::zero();
+
+    if (_l > 1) {
+      _buildOperator();
+      _setB0();
+      _z_solve->setVectors(_Y0, _B0);
+      _z_solve->solve();
+
+      _setBL();
+      _z_solve->setVectors(_YL, _BL);
+      _z_solve->solve();
+
+      y0b0 = _Y0->dot(*_B0);
+      y0bl = _Y0->dot(*_BL);
+      ylb0 = _YL->dot(*_B0);
+      ylbl = _YL->dot(*_BL);
+    }
+
     ScalarType kappa0;
     ScalarType kappal;
     ScalarType rho;
@@ -652,13 +661,6 @@ namespace Belos {
     // temporary variables used to fit Teuchos/numerics API
     std::vector<ScalarType> res(1);
     ScalarType kappal0;
-
-    // Compute auxiliary dot products
-    ScalarType y0b0 = _Y0->dot(*_B0);
-    ScalarType y0bl = _Y0->dot(*_BL);
-    ScalarType ylb0 = _YL->dot(*_B0);
-    ScalarType ylbl = _YL->dot(*_BL);
-
 
     // kappa0 = sqrt(Y0p*Zp Y0p)
     MVT::MvDot(*(_R[0]), *(_R[0]), res);
@@ -680,7 +682,7 @@ namespace Belos {
 
     ScalarType gamma = rho/std::abs(rho) * std::max(std::abs(rho), 0.7);
 
-    ScalarType omega = gamma*kappa0/kappal; 
+    ScalarType omega = gamma*kappa0/kappal;
     for (int i = 0 ; i < _l-1 ; ++i) {
       (*_out)(i) = (*_Y0)(i) - omega*((*_YL)(i));
     }
