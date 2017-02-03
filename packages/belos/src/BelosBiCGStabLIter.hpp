@@ -163,6 +163,13 @@ namespace Belos {
     typedef Teuchos::ScalarTraits<ScalarType> SCT;
     typedef typename SCT::magnitudeType MagnitudeType;
 
+
+    enum PolynomialMode {
+      MinRes,
+      Ortho,
+      ConvexCombination
+    };
+
     //! @name Constructors/Destructor
     //@{
 
@@ -320,6 +327,9 @@ namespace Belos {
     int iter_;
 
     int l_;
+
+    PolynomialMode poly_mode_;
+
     //
     // State Storage
     //
@@ -348,10 +358,23 @@ namespace Belos {
     numRHS_(0),
     initialized_(false),
     iter_(0),
-    l_(2)
+    l_(2),
+    poly_mode_(MinRes)
   {
-
     l_ = params.get("L", 2);
+
+    if (params.isParameter("POLYMODE")) {
+      std::string default_mode("MINRES");
+      std::string polymode = params.get("POLYMODE", default_mode);
+      if (polymode == "MINRES")
+	poly_mode_ = MinRes;
+      else if (polymode == "ORTHO")
+	poly_mode_ = Ortho;
+      else if (polymode == "COMB")
+	poly_mode_ = ConvexCombination;
+      else
+	throw "BiCGStab(l): invalid POLYMODE option = " + polymode;
+    }
   }
 
 
@@ -534,9 +557,16 @@ namespace Belos {
 
       //------------------
       // Polynomial Part
-      //Y = polysolver.minresPolynomial();
-      Y = polysolver.convexCombiPolynomial();
-
+      switch (poly_mode_) {
+      case MinRes:
+	Y = polysolver.minresPolynomial();
+	break;
+      case ConvexCombination:
+	Y = polysolver.convexCombiPolynomial();
+	break;
+      case Ortho:
+	throw "Ortho only polynomial is not supported yet by BiCGStab(l)";
+      }
 
       omega_ = (*Y)(l_-1);
       //-----------------

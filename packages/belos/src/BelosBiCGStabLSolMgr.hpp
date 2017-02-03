@@ -280,6 +280,7 @@ namespace Belos {
     static const std::string label_default_;
     static const Teuchos::RCP<std::ostream> outputStream_default_;
     static const int l_default_;
+    static const std::string polymode_default_;
 
     
     // Current solver values.
@@ -287,6 +288,7 @@ namespace Belos {
     int maxIters_, numIters_;
     int verbosity_, outputStyle_, outputFreq_, defQuorum_;
     int l_;
+    std::string polymode_;
     bool showMaxResNormOnly_;
     std::string resScale_;
 
@@ -332,6 +334,10 @@ const Teuchos::RCP<std::ostream> BiCGStabLSolMgr<ScalarType,MV,OP>::outputStream
 
 template<class ScalarType, class MV, class OP>
 const int BiCGStabLSolMgr<ScalarType,MV,OP>::l_default_ = 1;
+
+template<class ScalarType, class MV, class OP>
+const std::string BiCGStabLSolMgr<ScalarType,MV,OP>::polymode_default_ = "MINRES";
+
   
 // Empty Constructor
 template<class ScalarType, class MV, class OP>
@@ -345,6 +351,7 @@ BiCGStabLSolMgr<ScalarType,MV,OP>::BiCGStabLSolMgr() :
   outputFreq_(outputFreq_default_),
   defQuorum_(defQuorum_default_),
   l_(l_default_),
+  polymode_(polymode_default_),
   showMaxResNormOnly_(showMaxResNormOnly_default_),
   resScale_(resScale_default_),
   label_(label_default_),
@@ -417,6 +424,12 @@ void BiCGStabLSolMgr<ScalarType,MV,OP>::setParameters( const Teuchos::RCP<Teucho
     params_->set("L", l_);
   }
 
+  if (params->isParameter("POLYMODE")) {
+    polymode_ = params->get("POLYMODE", polymode_default_);
+    std::transform(polymode_.begin(), polymode_.end(), polymode_.begin(), static_cast < int(*)(int) > (std::toupper));
+    params->set("POLYMODE", polymode_);
+  }
+  
 
   // Check to see if the timer label changed.
   if (params->isParameter("Timer Label")) {
@@ -652,7 +665,9 @@ BiCGStabLSolMgr<ScalarType,MV,OP>::getValidParameters() const
     pl->set("Timer Label", label_default_,
       "The string to use as a prefix for the timer labels.");
     pl->set("L", l_default_, "The l parameter of BiCGStab(l)");
-
+    pl->set("POLYMODE", polymode_default_, "Which polynomial part is used.\n"
+	    "Values can be: MINRES (def), ORTHO or COMBINATION");
+	   
     //  defaultParams_->set("Restart Timers", restartTimers_);
     validParams_ = pl;
   }

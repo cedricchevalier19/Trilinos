@@ -111,11 +111,16 @@ main (int argc, char *argv[])
   bool tolerant = false;
   bool verbose = false;
   bool debug = false;
-  int l = 2;
+  int lmin = 1;
+  int lmax = 2;
+  std::string polymode="MINRES";
   Teuchos::CommandLineProcessor cmdp (false, true);
   cmdp.setOption("numRows", &numRows,
                  "Global number of rows (and columns) in the sparse matrix to generate.");
-  cmdp.setOption("l", &l, "l parameter for BiCGStab(l)");
+  cmdp.setOption("lmin", &lmin, "minimum l parameter for BiCGStab(l)");
+  cmdp.setOption("lmax", &lmax, "maximum l parameter for BiCGStab(l)");
+  cmdp.setOption("polymode", &polymode, "how polynomial part is computed.\n"
+		 "Allowed values are: MINRES, COMBINATION, ALL(def)\n");
   cmdp.setOption("tolerant", "intolerant", &tolerant,
                  "Whether to parse files tolerantly.");
   cmdp.setOption("verbose", "quiet", &verbose,
@@ -129,24 +134,22 @@ main (int argc, char *argv[])
   // Output stream for verbose output.
   RCP<FancyOStream> verbOut = verbose ? out : getFancyOStream (blackHole);
 
-  const bool success = true;
+  bool success = true;
 
   // Test whether it's possible to instantiate the solver.
   // This is a minimal compilation test.
-  *verbOut << "Instantiating BiCGStab(" << l << ") solver" << endl;
+  *verbOut << "Instantiating BiCGStabL solver" << endl;
   Belos::BiCGStabLSolMgr<scalar_type, MV, OP> solver;
   //
   // Test setting solver parameters.  For now, we just use an empty
   // (but non-null) parameter list, which the solver should fill in
   // with defaults.
   //
-  *verbOut << "Setting solver parameters" << endl;
+  *verbOut << "Setting default solver parameters" << endl;
   RCP<ParameterList> solverParams = parameterList ();
-  if (verbose) {
-    solverParams->set("Verbosity", Belos::Errors + Belos::Warnings + Belos::StatusTestDetails);
-  }
-  solverParams->set("L", l);
   solver.setParameters (solverParams);
+
+
   //
   // Create a linear system to solve.
   //
@@ -163,8 +166,6 @@ main (int argc, char *argv[])
     problemParams->set ("Problem type", std::string ("Nonsymmetric"));
     factory.makeProblem (A, X_guess, X_exact, B, problemParams);
   }
-  // Approximate solution vector is a copy of the guess vector.
-  RCP<MV> X (new MV (*X_guess));
 
   TEUCHOS_TEST_FOR_EXCEPTION(A.is_null(), std::logic_error,
                              "The sparse matrix is null!");
@@ -174,23 +175,56 @@ main (int argc, char *argv[])
                              "The exact solution X_exact is null!");
   TEUCHOS_TEST_FOR_EXCEPTION(B.is_null(), std::logic_error,
                              "The right-hand side B is null!");
-  TEUCHOS_TEST_FOR_EXCEPTION(X.is_null(), std::logic_error,
-                             "The approximate solution vector X is null!");
 
-  typedef Belos::LinearProblem<scalar_type, MV, OP> problem_type;
-  RCP<problem_type> problem (new problem_type (A, X, B));
-  problem->setProblem ();
-  solver.setProblem (problem);
 
-  *verbOut << "Solving linear system" << endl;
-  Belos::ReturnType result = solver.solve ();
+  std::vector<std::string> polymodes;
+  if ((polymode == "MINRES") or (polymode == "ALL"))
+    polymodes.push_back("MINRES");
+  if ((polymode == "COMBINATION") or (polymode == "ALL"))
+    polymodes.push_back("COMBINATION");
+  
+  for (auto mode = polymodes.begin() ; mode != polymodes.end() ; mode++) {
+    for (int l = lmin ; l <= lmax ; ++l) {
+      // Approximate solution vector is a copy of the guess vector.
+      RCP<MV> X (new MV (*X_guess));
 
-  *verbOut << "Result of solve: "
-           << Belos::convertReturnTypeToString (result)
-           << endl;
+      TEUCHOS_TEST_FOR_EXCEPTION(X.is_null(), std::logic_error,
+				 "The approximate solution vector X is null!");
+    
+      *verbOut << "Instantiating BiCGStabL(" << l << ") solver, mode=" << *mode << endl;
+      Belos::BiCGStabLSolMgr<scalar_type, MV, OP> solver;
 
-  // Make sure that all the processes finished.
-  comm->barrier ();
+      *verbOut << "Setting solver parameters" << endl;
+    
+      RCP<ParameterList> solverParams = parameterList ();
+      if (verbose) {
+	solverParams->set("Verbosity", Belos::Errors + Belos::Warnings + Belos::StatusTestDetails);
+      }
+      solverParams->set("L", l);
+      solverParams->set("POLYMODE", *mode);
+
+      solver.setParameters (solverParams);
+
+      typedef Belos::LinearProblem<scalar_type, MV, OP> problem_type;
+      RCP<problem_type> problem (new problem_type (A, X, B));
+      problem->setProblem ();
+      solver.setProblem (problem);
+
+      *verbOut << "Solving linear system" << endl;
+      Belos::ReturnType result = solver.solve ();
+
+      *verbOut << "Result of solve: "
+	       << Belos::convertReturnTypeToString (result)
+	       << endl;
+      // Make sure that all the processes finished.
+      comm->barrier ();
+
+      if (result != Belos::Converged) {
+	success = false;
+	break;
+      }
+    }
+  }
 
   if (success) {
     *out << "\nEnd Result: TEST PASSED" << endl;
