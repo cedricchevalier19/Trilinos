@@ -114,42 +114,6 @@ namespace Belos {
 
 
 
-    /// Polynomial computation
-    template<class ScalarType, class MV, class OP>
-    class QORPolynomialPart
-    {
-    public:
-      typedef MultiVecTraits<ScalarType,MV> MVT;
-      typedef Teuchos::SerialDenseVector<int, ScalarType> LVector;
-      typedef Teuchos::RCP<LVector> RCPLVector;
-
-    public:
-      QORPolynomialPart(std::vector<Teuchos::RCP<MV>> R);
-
-      RCPLVector minresPolynomial();
-      RCPLVector orthoPolynomial();
-      RCPLVector convexCombiPolynomial();
-
-    private:
-      void _buildOperator();
-      void _setB0();
-      void _setBL();
-
-    private:
-      std::vector<Teuchos::RCP<MV>> _R;
-      int _l;
-      // We keep the dense objects in memory.
-      Teuchos::RCP<Teuchos::SerialSpdDenseSolver<int, ScalarType>> _z_solve;
-      Teuchos::RCP<Teuchos::SerialSymDenseMatrix<int, ScalarType>> _Z;
-      RCPLVector _B0;
-      RCPLVector _BL;
-      RCPLVector _Y0;
-      RCPLVector _YL;
-      RCPLVector _out;
-    };
-
-
-
   template<class ScalarType, class MV, class OP>
   class QORIter : virtual public Iteration<ScalarType,MV,OP> {
 
@@ -322,9 +286,7 @@ namespace Belos {
     // Current number of iterations performed.
     int iter_;
 
-    int l_;
-
-    PolynomialMode poly_mode_;
+    int m_;
 
     //
     // State Storage
@@ -354,23 +316,8 @@ namespace Belos {
     numRHS_(0),
     initialized_(false),
     iter_(0),
-    l_(2),
-    poly_mode_(MinRes)
+    m_(10)
   {
-    l_ = params.get("L", 2);
-
-    if (params.isParameter("POLYMODE")) {
-      std::string default_mode("MINRES");
-      std::string polymode = params.get("POLYMODE", default_mode);
-      if (polymode == "MINRES")
-	poly_mode_ = MinRes;
-      else if (polymode == "ORTHO")
-	poly_mode_ = Ortho;
-      else if (polymode == "COMB")
-	poly_mode_ = ConvexCombination;
-      else
-	throw "BiCGStab(l): invalid POLYMODE option = " + polymode;
-    }
   }
 
 
@@ -473,6 +420,7 @@ namespace Belos {
   void QORIter<ScalarType,MV,OP>::iterate()
   {
     using Teuchos::RCP;
+    using Teuchos::rcp;
 
     //
     // Allocate/initialize data structures
@@ -482,82 +430,73 @@ namespace Belos {
     }
 
 
-    RCP<MV> d_V;
-    RCP<MV> d_V_A;
-    RCP<MV> d_V_V;
-    RCP<MV> d_V_tilde;
+    RCP<MV> V;
+    RCP<MV> V_A;
+    RCP<MV> V_tilde;
+    RCP<MV> PV;
 
-    RCP<Teuchos::SerialDenseMatrix<int,ScalarType>> l_L;
-    RCP<Teuchos::SerialDenseMatrix<int,ScalarType>> l_L_prev;
+    RCP<LMatrix> L = rcp(new LMatrix(m_, m_));
+    RCP<LMatrix> H = rcp(new LMatrix(m_, m_));
 
     ScalarType omega;
     ScalarType alpha;
 
-    RCP<Teuchos::SerialDenseVector<int, ScalarType>> l_nu;
-    
-      
+    RCP<LVector> nu = rcp(new LVector(m_));
+    RCP<LVector> vta = rcp(new LVector(m_));
+    RCP<LVector> vv = rcp(new LVector(m_));
+    RCP<LVector> y = rcp(new LVector(m_));
+
     // Allocate memory for scalars.
     std::vector<ScalarType> res(1);
 
     // Create convenience variable for one.
-    const ScalarType one = Teuchos::ScalarTraits<ScalarType>::one();
+    const ScalarType one  = Teuchos::ScalarTraits<ScalarType>::one();
+    const ScalarType zero = Teuchos::ScalarTraits<ScalarType>::zero();
 
-    // Residuals
-    std::vector<RCP<MV>> R(l_+1);
-    for (int i = 0 ; i <= l_ ; ++i) {
-      R[i] = MVT::CloneCopy(*R0_); // CC: only need R[0] = R0
-    }
-
-    // U vectors
-    std::vector<RCP<MV>> U(l_+1);
-    for (int i = 0 ; i <= l_ ; ++i) {
-      U[i] = MVT::CloneCopy(*U0_); // CC: only need U[0] = U0
-    }
-
-    // Get the current solution std::vector.
-    Teuchos::RCP<MV> X = lp_->getCurrLHSVec();
-
-    // For the polynomial part
-    QORPolynomialPart<ScalarType, MV, OP> polysolver(R);
-    typename QORPolynomialPart<ScalarType, MV, OP>::RCPLVector Y;
+    int k;
 
     ////////////////////////////////////////////////////////////////
     // Iterate until the status test tells us to stop.
     //
     while (stest_->checkStatus(this) != Passed) {
+      iter_++;
 
       // vv_k = tV_k-1 v_k
       Teuchos::Range1D range_k1 (0, k-1);
       std::vector<int> column(1);
       column[0] = k;
-      RCP<MV> V_k1 = MVT::CloneView(d_V, range_k1);
-      RCP<MV> v_k = MVT::CloneView(d_V, column);
-      MVT::MvTransMv(one, *v_k1, *v_k, l_v_v);
+      RCP<MV> mV_k1 = MVT::CloneView(V, range_k1);
+      RCP<MV> V_k = MVT::CloneView(V, column);
+      LVector vv_k(Teuchos::View, k-1);
+      MVT::MvTransMv(one, *mV_k1, *V_k, vv_k);
 
       // vtA_k = tV_k vA_k
+      LVector vta_k(Teuchos::View, *vta);
       Teuchos::Range1D range_k (0, k);
-      RCP<MV> va_k = MVT::CloneView(d_Va, column);
-      RCP<MV> V_k = MVT::CloneView(d_V, range_k);
-      MVT::MvTransMv(one, *V_k, *va_k, l_vta_k);
+      RCP<MV> mV_k = MVT::CloneView(*V, range_k);
+      MVT::MvTransMv(one, *mV_k, *V_A, vta_k);
 
       // Extract submatrix L_k-1
       LMatrix L_k1(Teuchos::View, *L, k-1, k-1);
-      
+      LVector l_k = Teuchos::getCol<int, ScalarType>(Teuchos::View, *L, k);
+
       // l_k = L_k-1 vv_k
-      l_k.multiply(Teuchos::NO_TRANS, Teucos::NO_TRANS, one, L_k1, *l_v_v, zero);
-      
+      l_k.multiply(Teuchos::NO_TRANS, Teuchos::NO_TRANS, one, L_k1, vv_k, zero);
+
       // ty_k = tl_k L_k-1
       // ie: y_k = tL_k-1 l_k
+      LVector y_k(Teuchos::View, *y, k);
       y_k.multiply(Teuchos::TRANS, Teuchos::NO_TRANS, one, L_k1, *l_k, zero);
 
       // tpv_k = ty_k tVk-1
       // ie: pv_k = Vk-1 y_k
-      MVT::MvTimesMatAddMv(one, *V_k1, *y_k, zero, *pv_k);
-      
+      RCP<MV> PV_k = MVT::CloneView(*PV, range_k);
+      MVT::MvTimesMatAddMv(one, *mV_k1, y_k, zero, *PV_k);
+
       // l_kk = norm(vk-pv_k)
-      MVT::MvAddMv(one, *v_k, -one, *pv_k, *pv_k);
-      MVT::MvNorm(*pv_k, res);
-      lkk = res[0];
+      MVT::MvAddMv(one, *mV_k, -one, *PV_k, *PV_k);
+      MVT::MvNorm(*PV_k, res);
+      ScalarType lkk = res[0];
 
       // L_k = L_k-1 union { -1/l_kk*ty_k , 1/l_kk}
       LMatrix L_k(Teuchos::View, *L, k, k);
@@ -565,53 +504,55 @@ namespace Belos {
 	L_k(k-1, i) = - y_k(i)/lkk;
       }
       L_k(k-1, k-1) = 1/lkk;
-      
+
       // l_nu = L_k nu << recursive trick !
-      LVector l_nu_k1(Teuchos::View, *l_nu, k-1);
       LVector nu_k1(Teuchos::View, *nu, k-1);
 
+      LVector l_nu(k);
       // l_nu = ( L_k-1*nu_k-1 )
       //        ( 1/l_kk (-tl_k L_k-1 nu_k-1 + vu_1,k))
-      l_nu_k1.multiply(Teuchos::NO_TRANS, Teucos::NO_TRANS, one, L_k1, *l_nu_k1, zero);
-      (*l_nu)(k) = (-l_k.dot(l_nu_k1) + (*l_nu)(k))/lkk;
-      
-      // l_A = L_k vtA_k
+      l_nu.multiply(Teuchos::NO_TRANS, Teuchos::NO_TRANS, one, L_k1, nu_k1, zero);
+      l_nu(k) = (-l_k.dot(nu_k1) + l_nu(k))/lkk;
 
-      LVector l_nu_k(Teuchos::View, *l_nu, k);
+      // l_A = L_k vtA_k
+      LVector l_A(k);
+      l_A.multiply(Teuchos::NO_TRANS, Teuchos::NO_TRANS, one, L_k, vta_k, zero);
+
       // omega = dot(l_A, l_nu)
-      omega = l_A.dot(l_nu_k);
-      
+      omega = l_A.dot(l_nu);
+
       // alpha = |vA_k|^2 - |l_A|^2
-      alpha = vA_k.dot(vA_k) - l_A.dot(l_A);
-	
+      MVT::MvDot(*V_A, *V_A, res);
+      alpha = res[0] - l_A.dot(l_A);
+
       // h(1:k, k) = tL_k (l_A + alpha/omega l_nu)
-      LMatrix H_k(TeuchosView, *H, k);
+      LMatrix H_k(Teuchos::View, *H, k);
       LVector h_k = Teuchos::getCol<int, ScalarType>(Teuchos::View, H_k, k);
 
-      h_k = l_A + alpha/omega * l_nu_k;
+      h_k = l_A + alpha/omega * l_nu;
       h_k.multiply(Teuchos::TRANS, Teuchos::NO_TRANS, one, L_k, h_k, zero);
-      
+
       // v_tilde = vA_k - V_k h(1:k,k)
-      v_tilde = MVT::CloneView(vA_k);
-      MVT::MvTimesMatAddMv(-one, V_k, h+k, one, *v_tilde);
+      V_tilde = MVT::CloneView(V_A);
+      MVT::MvTimesMatAddMv(-one, V_k, h_k, one, *V_tilde);
       // h(k_+1, k) = |v_tilde|^2
-      MVT::MvNorm(*v_tilde, res, Teuchos::TwoNorm);
+      MVT::MvNorm(*V_tilde, res, TwoNorm);
       (*H)(k+1, k) = res[0];
-      
+
       // nu(1, k+1) = -1/(h(k+1,k) tnu h(1:k, k)
       LVector nu_k(Teuchos::View, *nu, k);
       (*nu)(1, k+1) = -1/(*H)(k+1, k) * nu_k.dot(h_k);
-      
+
       // nu = (nu(1,1) ... nu(1,k+1))
       // Nothing to do.
-      
+
       // v_k+1 = 1/h(k+1, k) v_tilde
-      RCP<MV> v_k = MVT::CloneView(d_V, column);
-      MVT::MvAddMv(1/(*H)(k+1, k), *v_tilde, zero, *v_tilde, v_k);
-      
+      RCP<MV> V_kp1 = MVT::CloneView(V, k+1);
+      MVT::MvAddMv(1/(*H)(k+1, k), *V_tilde, zero, *V_tilde, V_kp1);
+
       // vA_k+1 = A v_k+1
       // CC: Check if it can work with a preconditionner
-      lp_->apply(va_k, v_k);
+      lp_->apply(V_A, V_kp1);
 
     } // end while (sTest_->checkStatus(this) != Passed)
   }
