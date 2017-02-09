@@ -91,8 +91,23 @@ namespace Teuchos {
 
     //! Copy Constructor
     /*! \note Allow explicit control of whether a deep copy or view of \c Source is made with this copy constructor.
-    */
+     */
     SerialDenseVector(DataAccess CV, const SerialDenseVector<OrdinalType, ScalarType> &Source);
+
+
+    //! Subvector Copy Constructor
+    /*!
+      \param CV - Enumerated type set to Teuchos::Copy or Teuchos::View.
+      \param Source - Reference to another dense matrix from which values are to be copied.
+      \param numRows - The number of rows in this vector.
+      \param startRow - The row of \c Source from which the subvector copy should start.
+
+      Creates a shaped vector with \c numRows rows, which is a subvector of \c Source.
+      If \c startRow is not given, then the subvector is the leading subvector of \c Source.
+      Otherwise, the (0) entry in the "copied" vector is the (\c startRow) entry of \c Source.
+    */
+    SerialDenseVector(DataAccess CV, const SerialDenseVector<OrdinalType, ScalarType> &Source,
+		      OrdinalType numRows, OrdinalType startRow=0);
     
     //! Destructor
     virtual ~SerialDenseVector ();
@@ -232,6 +247,10 @@ namespace Teuchos {
   SerialDenseVector<OrdinalType, ScalarType>::SerialDenseVector(DataAccess CV, const SerialDenseVector<OrdinalType, ScalarType> &Source) :
     SerialDenseMatrix<OrdinalType,ScalarType>( CV, Source ) {}
 
+  template<typename OrdinalType, typename ScalarType>
+  SerialDenseVector<OrdinalType, ScalarType>::SerialDenseVector(DataAccess CV,const SerialDenseVector<OrdinalType, ScalarType> &Source, OrdinalType numRows, OrdinalType startRow) :
+    SerialDenseMatrix<OrdinalType,ScalarType>( CV, Source, numRows, Teuchos::OrdinalTraits<OrdinalType>::zero(), startRow) {}
+  
   template<typename OrdinalType, typename ScalarType>
   SerialDenseVector<OrdinalType, ScalarType>::~SerialDenseVector() {}
 
