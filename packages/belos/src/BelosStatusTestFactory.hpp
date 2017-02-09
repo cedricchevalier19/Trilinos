@@ -39,6 +39,9 @@
 // ************************************************************************
 //@HEADER
 
+#ifndef BELOS_STATUS_TEST_FACTORY_HPP
+#define BELOS_STATUS_TEST_FACTORY_HPP
+
 #include <BelosStatusTestCombo.hpp>
 #include <BelosStatusTestGenResNorm.hpp>
 #include <BelosStatusTestGenResSubNorm.hpp>
@@ -260,3 +263,5 @@ namespace Belos {
   };
 
 } // namespace Belos
+
+#endif // BELOS_STATUS_TEST_FACTORY_HPP
