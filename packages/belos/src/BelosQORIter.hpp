@@ -93,23 +93,30 @@ namespace Belos {
   template <class ScalarType, class MV>
   struct QORIterationState {
 
-    /*! \brief The current residual. */
-    Teuchos::RCP<const MV> R0;
+    typedef Teuchos::ScalarTraits<ScalarType> SCT;
+    typedef typename SCT::magnitudeType MagnitudeType;
 
-    /*! \brief The initial residual. */
-    Teuchos::RCP<const MV> Rhat;
+    /*! \brief The current dimension of the reduction.
+     *
+     * This should always be equal to PseudoBlockGmresIter::getCurSubspaceDim()
+     */
+    int curDim;
+    /*! \brief The current Krylov basis. */
+    std::vector<Teuchos::RCP<const MV> > V;
+    /*! \brief The current Hessenberg matrix.
+     *
+     * The \c curDim by \c curDim leading submatrix of H is the
+     * projection of problem->getOperator() by the first \c curDim vectors in V.
+     */
+    std::vector<Teuchos::RCP<const Teuchos::SerialDenseMatrix<int,ScalarType> > > H;
+    /*! \brief The current right-hand side of the least squares system RY = Z. */
+    std::vector<Teuchos::RCP<const Teuchos::SerialDenseVector<int,ScalarType> > > Z;
+    /*! \brief The current Given's rotation coefficients. */
+    std::vector<Teuchos::RCP<const Teuchos::SerialDenseVector<int,ScalarType> > > sn;
+    std::vector<Teuchos::RCP<const Teuchos::SerialDenseVector<int,MagnitudeType> > > cs;
 
-    /*! \brief A * M * the first decent direction vector */
-    Teuchos::RCP<const MV> U0;
-
-    ScalarType rho_0, alpha, omega;
-
-    QORIterationState() : R0(Teuchos::null), Rhat(Teuchos::null), U0(Teuchos::null)
-    {
-      rho_0 = Teuchos::ScalarTraits<ScalarType>::one();
-      alpha = Teuchos::ScalarTraits<ScalarType>::one();
-      omega = Teuchos::ScalarTraits<ScalarType>::one();
-    }
+    QORIterationState() : curDim(0), V(0), H(0), Z(0), sn(0), cs(0)
+    {}
   };
 
 
@@ -186,7 +193,7 @@ namespace Belos {
      * \note For any pointer in \c newstate which directly points to the multivectors in
      * the solver, the data is not copied.
      */
-    void initializeQOR(QORIterationState<ScalarType,MV>& newstate);
+    void initialize(QORIterationState<ScalarType,MV>& newstate);
 
     /*! \brief Initialize the solver with the initial vectors from the linear problem
      *  or random data.
@@ -194,7 +201,7 @@ namespace Belos {
     void initialize()
     {
       QORIterationState<ScalarType,MV> empty;
-      initializeQOR(empty);
+      initialize(empty);
     }
 
     /*! \brief Get the current state of the linear solver.
@@ -206,12 +213,6 @@ namespace Belos {
      */
     QORIterationState<ScalarType,MV> getState() const {
       QORIterationState<ScalarType,MV> state;
-      state.R0 = R0_;
-      state.Rhat = Rhat_;
-      state.U0 = U0_;
-      state.rho_0 = rho_0_;
-      state.alpha = alpha_;
-      state.omega = omega_;
       return state;
     }
 
@@ -248,6 +249,23 @@ namespace Belos {
 
     //! Get the blocksize to be used by the iterative solver in solving this linear problem.
     int getBlockSize() const { return 1; }
+
+
+    //! Get the dimension of the search subspace used to generate the current solution to the linear problem.
+    int getCurSubspaceDim() const {
+      if (!initialized_) return 0;
+      return curDim_;
+    };
+
+    //! Get the maximum dimension allocated for the search subspace.
+    int getMaxSubspaceDim() const { return numBlocks_; }
+
+    //! \brief Set the maximum number of blocks used by the iterative solver.
+    void setNumBlocks(int numBlocks);
+
+    //! Get the maximum number of blocks used by the iterative solver in solving this linear problem.
+    int getNumBlocks() const { return numBlocks_; }
+
 
     //! \brief Set the blocksize.
     void setBlockSize(int blockSize) {
@@ -286,7 +304,9 @@ namespace Belos {
     // Current number of iterations performed.
     int iter_;
 
-    int m_;
+    int numBlocks_;
+
+    int curDim_;
 
     //
     // State Storage
@@ -316,7 +336,7 @@ namespace Belos {
     numRHS_(0),
     initialized_(false),
     iter_(0),
-    m_(10)
+    numBlocks_(10)
   {
   }
 
@@ -324,92 +344,8 @@ namespace Belos {
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Initialize this iteration object
   template <class ScalarType, class MV, class OP>
-  void QORIter<ScalarType,MV,OP>::initializeQOR(QORIterationState<ScalarType,MV>& newstate)
+  void QORIter<ScalarType,MV,OP>::initialize(QORIterationState<ScalarType,MV>& newstate)
   {
-    // Check if there is any multivector to clone from.
-    Teuchos::RCP<const MV> lhsMV = lp_->getCurrLHSVec();
-    Teuchos::RCP<const MV> rhsMV = lp_->getCurrRHSVec();
-    TEUCHOS_TEST_FOR_EXCEPTION((lhsMV==Teuchos::null && rhsMV==Teuchos::null),std::invalid_argument,
-		       "Belos::QORIter::initialize(): Cannot initialize state storage!");
-
-    // Get the multivector that is not null.
-    Teuchos::RCP<const MV> tmp = ( (rhsMV!=Teuchos::null)? rhsMV: lhsMV );
-
-    // Get the number of right-hand sides we're solving for now.
-    int numRHS = MVT::GetNumberVecs(*tmp);
-    numRHS_ = numRHS;
-
-    if (numRHS_ != 1)
-      throw "Too many RHS";
-
-    // Initialize the state storage
-    // If the subspace has not be initialized before or has changed sizes, generate it using the LHS or RHS from lp_.
-    if (Teuchos::is_null(R0_) || MVT::GetNumberVecs(*R0_)!=numRHS_) {
-      R0_ = MVT::Clone( *tmp, numRHS_ );
-      Rhat_ = MVT::Clone( *tmp, numRHS_ );
-      U0_ = MVT::Clone( *tmp, numRHS_ );
-    }
-
-    // NOTE:  In BiCGStabIter R_, the initial residual, is required!!!
-    //
-    std::string errstr("Belos::BlockPseudoCGIter::initialize(): Specified multivectors must have a consistent length and width.");
-
-    if (!Teuchos::is_null(newstate.R0)) {
-
-      TEUCHOS_TEST_FOR_EXCEPTION( MVT::GetGlobalLength(*newstate.R0) != MVT::GetGlobalLength(*R0_),
-			  std::invalid_argument, errstr );
-      TEUCHOS_TEST_FOR_EXCEPTION( MVT::GetNumberVecs(*newstate.R0) != numRHS_,
-			  std::invalid_argument, errstr );
-
-      // Copy residual vectors from newstate into R
-      if (newstate.R0 != R0_) {
-	// Assigned by the new state
-	MVT::Assign(*newstate.R0, *R0_);
-      }
-      else {
-	// Computed
-	lp_->computeCurrResVec(R0_.get());
-      }
-
-      // Set Rhat
-      if (!Teuchos::is_null(newstate.Rhat) && newstate.Rhat != Rhat_) {
-	// Assigned by the new state
-	MVT::Assign(*newstate.Rhat, *Rhat_);
-      }
-      else {
-	// Set to be the initial residual
-	MVT::Assign(*lp_->getInitResVec(), *Rhat_);
-      }
-
-      // Set U0
-      if (!Teuchos::is_null(newstate.U0) && newstate.U0 != U0_) {
-	// Assigned by the new state
-	MVT::Assign(*newstate.U0, *U0_);
-      }
-      else {
-	// Initial V = 0
-	MVT::MvInit(*U0_);
-      }
-
-
-      // Set rho_old
-      rho_0_ = newstate.rho_0;
-
-
-      // Set alpha
-      alpha_ = newstate.alpha;
-
-      // Set omega
-      omega_ = newstate.omega;
-
-    }
-    else {
-
-      TEUCHOS_TEST_FOR_EXCEPTION(Teuchos::is_null(newstate.R0),std::invalid_argument,
-			 "Belos::BelosQORIter::initialize(): BiCGStabStateIterState does not have initial residual.");
-    }
-
-    // The solver is initialized
     initialized_ = true;
   }
 
@@ -435,16 +371,16 @@ namespace Belos {
     RCP<MV> V_tilde;
     RCP<MV> PV;
 
-    RCP<LMatrix> L = rcp(new LMatrix(m_, m_));
-    RCP<LMatrix> H = rcp(new LMatrix(m_, m_));
+    RCP<LMatrix> L = rcp(new LMatrix(numBlocks_, numBlocks_));
+    RCP<LMatrix> H = rcp(new LMatrix(numBlocks_, numBlocks_));
 
     ScalarType omega;
     ScalarType alpha;
 
-    RCP<LVector> nu = rcp(new LVector(m_));
-    RCP<LVector> vta = rcp(new LVector(m_));
-    RCP<LVector> vv = rcp(new LVector(m_));
-    RCP<LVector> y = rcp(new LVector(m_));
+    RCP<LVector> nu = rcp(new LVector(numBlocks_));
+    RCP<LVector> vta = rcp(new LVector(numBlocks_));
+    RCP<LVector> vv = rcp(new LVector(numBlocks_));
+    RCP<LVector> y = rcp(new LVector(numBlocks_));
 
     // Allocate memory for scalars.
     std::vector<ScalarType> res(1);
@@ -453,44 +389,42 @@ namespace Belos {
     const ScalarType one  = Teuchos::ScalarTraits<ScalarType>::one();
     const ScalarType zero = Teuchos::ScalarTraits<ScalarType>::zero();
 
-    int k;
-
     ////////////////////////////////////////////////////////////////
     // Iterate until the status test tells us to stop.
     //
-    while (stest_->checkStatus(this) != Passed) {
+    while ((stest_->checkStatus(this) != Passed) && (curDim_ < numBlocks_)) {
       iter_++;
 
       // vv_k = tV_k-1 v_k
-      Teuchos::Range1D range_k1 (0, k-1);
+      Teuchos::Range1D range_k1 (0, curDim_-1);
       std::vector<int> column(1);
-      column[0] = k;
-      RCP<MV> mV_k1 = MVT::CloneView(V, range_k1);
-      RCP<MV> V_k = MVT::CloneView(V, column);
-      LVector vv_k(Teuchos::View, k-1);
+      column[0] = curDim_;
+      RCP<const MV> mV_k1 = MVT::CloneView(*V, range_k1);
+      RCP<const MV> V_k = MVT::CloneView(*V, column);
+      LVector vv_k(Teuchos::View, *vv, curDim_-1);
       MVT::MvTransMv(one, *mV_k1, *V_k, vv_k);
 
       // vtA_k = tV_k vA_k
       LVector vta_k(Teuchos::View, *vta);
-      Teuchos::Range1D range_k (0, k);
-      RCP<MV> mV_k = MVT::CloneView(*V, range_k);
+      Teuchos::Range1D range_k (0, curDim_);
+      RCP<const MV> mV_k = MVT::CloneView(*V, range_k);
       MVT::MvTransMv(one, *mV_k, *V_A, vta_k);
 
       // Extract submatrix L_k-1
-      LMatrix L_k1(Teuchos::View, *L, k-1, k-1);
-      LVector l_k = Teuchos::getCol<int, ScalarType>(Teuchos::View, *L, k);
+      LMatrix L_k1(Teuchos::View, *L, curDim_-1, curDim_-1);
+      LVector l_k = Teuchos::getCol<int, ScalarType>(Teuchos::View, *L, curDim_);
 
       // l_k = L_k-1 vv_k
       l_k.multiply(Teuchos::NO_TRANS, Teuchos::NO_TRANS, one, L_k1, vv_k, zero);
 
       // ty_k = tl_k L_k-1
       // ie: y_k = tL_k-1 l_k
-      LVector y_k(Teuchos::View, *y, k);
-      y_k.multiply(Teuchos::TRANS, Teuchos::NO_TRANS, one, L_k1, *l_k, zero);
+      LVector y_k(Teuchos::View, *y, curDim_);
+      y_k.multiply(Teuchos::TRANS, Teuchos::NO_TRANS, one, L_k1, l_k, zero);
 
       // tpv_k = ty_k tVk-1
       // ie: pv_k = Vk-1 y_k
-      RCP<MV> PV_k = MVT::CloneView(*PV, range_k);
+      RCP<MV> PV_k = MVT::CloneViewNonConst(*PV, range_k);
       MVT::MvTimesMatAddMv(one, *mV_k1, y_k, zero, *PV_k);
 
       // l_kk = norm(vk-pv_k)
@@ -499,23 +433,23 @@ namespace Belos {
       ScalarType lkk = res[0];
 
       // L_k = L_k-1 union { -1/l_kk*ty_k , 1/l_kk}
-      LMatrix L_k(Teuchos::View, *L, k, k);
-      for (int i = 0 ; i < k-1 ; ++i) {
-	L_k(k-1, i) = - y_k(i)/lkk;
+      LMatrix L_k(Teuchos::View, *L, curDim_, curDim_);
+      for (int i = 0 ; i < curDim_-1 ; ++i) {
+	L_k(curDim_-1, i) = - y_k(i)/lkk;
       }
-      L_k(k-1, k-1) = 1/lkk;
+      L_k(curDim_-1, curDim_-1) = 1/lkk;
 
       // l_nu = L_k nu << recursive trick !
-      LVector nu_k1(Teuchos::View, *nu, k-1);
+      LVector nu_k1(Teuchos::View, *nu, curDim_-1);
 
-      LVector l_nu(k);
+      LVector l_nu(curDim_);
       // l_nu = ( L_k-1*nu_k-1 )
       //        ( 1/l_kk (-tl_k L_k-1 nu_k-1 + vu_1,k))
       l_nu.multiply(Teuchos::NO_TRANS, Teuchos::NO_TRANS, one, L_k1, nu_k1, zero);
-      l_nu(k) = (-l_k.dot(nu_k1) + l_nu(k))/lkk;
+      l_nu(curDim_) = (-l_k.dot(nu_k1) + l_nu(curDim_))/lkk;
 
       // l_A = L_k vtA_k
-      LVector l_A(k);
+      LVector l_A(curDim_);
       l_A.multiply(Teuchos::NO_TRANS, Teuchos::NO_TRANS, one, L_k, vta_k, zero);
 
       // omega = dot(l_A, l_nu)
@@ -526,33 +460,37 @@ namespace Belos {
       alpha = res[0] - l_A.dot(l_A);
 
       // h(1:k, k) = tL_k (l_A + alpha/omega l_nu)
-      LMatrix H_k(Teuchos::View, *H, k);
-      LVector h_k = Teuchos::getCol<int, ScalarType>(Teuchos::View, H_k, k);
+      LMatrix H_k(Teuchos::View, *H, curDim_, curDim_);
+      LVector h_k = Teuchos::getCol<int, ScalarType>(Teuchos::View, H_k, curDim_);
 
-      h_k = l_A + alpha/omega * l_nu;
+      h_k = l_A;
+      l_nu *= alpha/omega;
+      h_k += l_nu;
       h_k.multiply(Teuchos::TRANS, Teuchos::NO_TRANS, one, L_k, h_k, zero);
 
       // v_tilde = vA_k - V_k h(1:k,k)
-      V_tilde = MVT::CloneView(V_A);
-      MVT::MvTimesMatAddMv(-one, V_k, h_k, one, *V_tilde);
+      // column[0] == k
+      V_tilde = MVT::CloneViewNonConst(*V_A, column);
+      MVT::MvTimesMatAddMv(-one, *V_k, h_k, one, *V_tilde);
       // h(k_+1, k) = |v_tilde|^2
       MVT::MvNorm(*V_tilde, res, TwoNorm);
-      (*H)(k+1, k) = res[0];
+      (*H)(curDim_+1, curDim_) = res[0];
 
       // nu(1, k+1) = -1/(h(k+1,k) tnu h(1:k, k)
-      LVector nu_k(Teuchos::View, *nu, k);
-      (*nu)(1, k+1) = -1/(*H)(k+1, k) * nu_k.dot(h_k);
+      LVector nu_k(Teuchos::View, *nu, curDim_);
+      (*nu)(curDim_+1) = -1/(*H)(curDim_+1, curDim_) * nu_k.dot(h_k);
 
       // nu = (nu(1,1) ... nu(1,k+1))
       // Nothing to do.
 
       // v_k+1 = 1/h(k+1, k) v_tilde
-      RCP<MV> V_kp1 = MVT::CloneView(V, k+1);
-      MVT::MvAddMv(1/(*H)(k+1, k), *V_tilde, zero, *V_tilde, V_kp1);
+      column[0] = curDim_ + 1;
+      RCP<MV> V_kp1 = MVT::CloneViewNonConst(*V, column);
+      MVT::MvAddMv(1/(*H)(curDim_+1, curDim_), *V_tilde, zero, *V_tilde, *V_kp1);
 
       // vA_k+1 = A v_k+1
       // CC: Check if it can work with a preconditionner
-      lp_->apply(V_A, V_kp1);
+      lp_->apply(*V_A, *V_kp1);
 
     } // end while (sTest_->checkStatus(this) != Passed)
   }
