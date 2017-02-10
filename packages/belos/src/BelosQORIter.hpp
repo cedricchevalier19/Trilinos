@@ -95,27 +95,37 @@ namespace Belos {
 
     typedef Teuchos::ScalarTraits<ScalarType> SCT;
     typedef typename SCT::magnitudeType MagnitudeType;
+    typedef Teuchos::SerialDenseMatrix<int, ScalarType> LMatrix;
+    typedef Teuchos::SerialDenseVector<int, ScalarType> LVector;
 
     /*! \brief The current dimension of the reduction.
      *
      * This should always be equal to PseudoBlockGmresIter::getCurSubspaceDim()
      */
     int curDim;
-    /*! \brief The current Krylov basis. */
-    std::vector<Teuchos::RCP<const MV> > V;
+
+    /*! \brief The current Krylov basis. Multivector of size numBlocks */
+    Teuchos::RCP<MV> V;
+    /*! \brief The current Av_k vector. */
+    Teuchos::RCP<MV> VA;
+
     /*! \brief The current Hessenberg matrix.
      *
      * The \c curDim by \c curDim leading submatrix of H is the
      * projection of problem->getOperator() by the first \c curDim vectors in V.
      */
-    std::vector<Teuchos::RCP<const Teuchos::SerialDenseMatrix<int,ScalarType> > > H;
-    /*! \brief The current right-hand side of the least squares system RY = Z. */
-    std::vector<Teuchos::RCP<const Teuchos::SerialDenseVector<int,ScalarType> > > Z;
-    /*! \brief The current Given's rotation coefficients. */
-    std::vector<Teuchos::RCP<const Teuchos::SerialDenseVector<int,ScalarType> > > sn;
-    std::vector<Teuchos::RCP<const Teuchos::SerialDenseVector<int,MagnitudeType> > > cs;
+    Teuchos::RCP<LMatrix> H;
 
-    QORIterationState() : curDim(0), V(0), H(0), Z(0), sn(0), cs(0)
+    /*! \brief Auxiliary Lower triangular matrix used to fill up the Hessenberg matrix */
+    Teuchos::RCP<LMatrix> L;
+
+    Teuchos::RCP<LVector> nu;
+
+    ScalarType omega;
+    ScalarType alpha;
+
+    QORIterationState() : curDim(0), V(Teuchos::null), VA(Teuchos::null), H(Teuchos::null)
+			, L(Teuchos::null), nu(Teuchos::null)
     {}
   };
 
@@ -133,6 +143,7 @@ namespace Belos {
     typedef OperatorTraits<ScalarType,MV,OP> OPT;
     typedef Teuchos::ScalarTraits<ScalarType> SCT;
     typedef typename SCT::magnitudeType MagnitudeType;
+    typedef int OrdinalType; // No ordinal information from Traits !
 
     typedef Teuchos::SerialDenseVector<int, ScalarType> LVector;
     typedef Teuchos::SerialDenseMatrix<int, ScalarType> LMatrix;
@@ -231,7 +242,7 @@ namespace Belos {
     //! Get the norms of the residuals native to the solver.
     //! \return A std::vector of length blockSize containing the native residuals.
     // amk TODO: are the residuals actually being set?  What is a native residual?
-    Teuchos::RCP<const MV> getNativeResiduals( std::vector<MagnitudeType> *norms ) const { return R0_; }
+    Teuchos::RCP<const MV> getNativeResiduals( std::vector<MagnitudeType> *norms ) const {return Teuchos::null; }
 
     //! Get the current update to the linear system.
     /*! \note This method returns a null pointer because the linear problem is current.
@@ -261,7 +272,7 @@ namespace Belos {
     int getMaxSubspaceDim() const { return numBlocks_; }
 
     //! \brief Set the maximum number of blocks used by the iterative solver.
-    void setNumBlocks(int numBlocks);
+    void setNumBlocks(int numBlocks) { numBlocks_ = numBlocks; }
 
     //! Get the maximum number of blocks used by the iterative solver in solving this linear problem.
     int getNumBlocks() const { return numBlocks_; }
@@ -279,7 +290,10 @@ namespace Belos {
     //@}
 
   private:
+    //! Restore a state and return whether a formal initialization is necessary.
+    bool _simplyRestore(QORIterationState<ScalarType,MV>& newstate);
 
+  private:
     //
     // Classes inputed through constructor that define the linear problem to be solved.
     //
@@ -311,16 +325,16 @@ namespace Belos {
     //
     // State Storage
     //
-    // Initial residual
-    Teuchos::RCP<MV> Rhat_;
-    //
-    // Residual
-    Teuchos::RCP<MV> R0_;
-    //
-    // Operator applied to preconditioned direction vector 1
-    Teuchos::RCP<MV> U0_;
-    //
-    ScalarType rho_0_, alpha_, omega_;
+    Teuchos::RCP<MV> V_;
+    Teuchos::RCP<MV> VA_;
+
+    Teuchos::RCP<LMatrix> L_;
+    Teuchos::RCP<LMatrix> H_;
+
+    ScalarType omega_;
+    ScalarType alpha_;
+
+    Teuchos::RCP<LVector> nu_;
   };
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -341,11 +355,117 @@ namespace Belos {
   }
 
 
+  template <class ScalarType, class MV, class OP>
+  bool QORIter<ScalarType,MV,OP>::_simplyRestore(QORIterationState<ScalarType,MV>& newstate)
+  {
+    bool simple_restore = true;
+    if (newstate.V.is_null()) {
+      V_ = MVT::Clone(*lp_->getRHS(), numBlocks_);
+      simple_restore = false;
+    }
+    else {
+      V_ = newstate.V;
+    }
+
+    if (newstate.VA.is_null()) {
+      VA_ = MVT::Clone(*V_, 1);
+      simple_restore = false;
+    }
+    else {
+      VA_ = newstate.VA;
+    }
+
+    if (newstate.H.is_null()) {
+      H_ = Teuchos::rcp<LMatrix>(new LMatrix(numBlocks_, numBlocks_));
+      simple_restore = false;
+    }
+    else {
+      H_ = newstate.H;
+    }
+
+    if (newstate.L.is_null()) {
+      L_ = Teuchos::rcp<LMatrix>(new LMatrix(numBlocks_, numBlocks_));
+      simple_restore = false;
+    }
+    else {
+      L_ = newstate.L;
+    }
+
+    if (newstate.nu.is_null()) {
+      nu_ = Teuchos::rcp<LVector>(new LVector(numBlocks_));
+      simple_restore = false;
+    }
+    else {
+      nu_ = newstate.nu;
+    }
+
+    omega_ = newstate.omega;
+    alpha_ = newstate.alpha;
+    if (newstate.curDim != curDim_) {
+      simple_restore =false;
+      curDim_ = newstate.curDim;
+    }
+
+    return simple_restore;
+  }
+
+
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Initialize this iteration object
   template <class ScalarType, class MV, class OP>
   void QORIter<ScalarType,MV,OP>::initialize(QORIterationState<ScalarType,MV>& newstate)
   {
+    const ScalarType one = Teuchos::ScalarTraits<ScalarType>::one();
+    const ScalarType zero = Teuchos::ScalarTraits<ScalarType>::zero();
+
+    if (_simplyRestore(newstate) // We have not done any new allocation
+	&& ((newstate.curDim != 0) && (newstate.curDim != numBlocks_))) { // we still can compute blocks
+      // We do not recompute all the initialization.
+      initialized_ = true;
+      return;
+    }
+
+    curDim_ = 1;
+
+    std::vector<int> column(1);
+    column[0] = 0;
+
+    Teuchos::RCP<MV> V0 = MVT::CloneViewNonConst(*V_, column);
+
+    std::vector<MagnitudeType> norm(1);
+    MVT::MvNorm(*V0, norm, TwoNorm);
+    MVT::MvScale(*V0, 1/norm[0]);
+
+    lp_->apply(*V0, *VA_);
+
+    L_ = rcp(new LMatrix(numBlocks_, numBlocks_));
+    (*L_)(0,0) = one;
+
+    std::vector<ScalarType> dot(1);
+    MVT::MvDot(*V0, *VA_, dot);
+    omega_ = dot[0];
+
+    MVT::MvDot(*VA_, *VA_, dot);
+    alpha_ = dot[0] - omega_*omega_;
+
+    H_ = rcp(new LMatrix(numBlocks_, numBlocks_));
+    (*H_)(0,0) = omega_ + alpha_/omega_;
+    (*nu_)(0) = one; // CC: not in the paper
+
+    Teuchos::RCP<MV> V_tilde = MVT::Clone(*VA_, 1);
+    MVT::MvAddMv(one, *VA_, -(*H_)(0,0), *V0, *V_tilde);
+
+    MVT::MvNorm(*V_tilde, norm, TwoNorm);
+    (*H_)(1,0) = norm[0];
+
+    column[0] = 1;
+    Teuchos::RCP<MV> V1 = MVT::CloneViewNonConst(*V_, column);
+    MVT::MvAddMv(zero, *V1, (*H_)(1,0), *V_tilde, *V1);
+
+    lp_->apply(*V1, *VA_);
+
+    (*nu_)(1) = - (*H_)(0,0)/(*H_)(1,0);
+
     initialized_ = true;
   }
 
@@ -365,19 +485,9 @@ namespace Belos {
       initialize();
     }
 
-
-    RCP<MV> V;
-    RCP<MV> V_A;
     RCP<MV> V_tilde;
     RCP<MV> PV;
 
-    RCP<LMatrix> L = rcp(new LMatrix(numBlocks_, numBlocks_));
-    RCP<LMatrix> H = rcp(new LMatrix(numBlocks_, numBlocks_));
-
-    ScalarType omega;
-    ScalarType alpha;
-
-    RCP<LVector> nu = rcp(new LVector(numBlocks_));
     RCP<LVector> vta = rcp(new LVector(numBlocks_));
     RCP<LVector> vv = rcp(new LVector(numBlocks_));
     RCP<LVector> y = rcp(new LVector(numBlocks_));
@@ -399,20 +509,20 @@ namespace Belos {
       Teuchos::Range1D range_k1 (0, curDim_-1);
       std::vector<int> column(1);
       column[0] = curDim_;
-      RCP<const MV> mV_k1 = MVT::CloneView(*V, range_k1);
-      RCP<const MV> V_k = MVT::CloneView(*V, column);
+      RCP<const MV> mV_k1 = MVT::CloneView(*V_, range_k1);
+      RCP<const MV> V_k = MVT::CloneView(*V_, column);
       LVector vv_k(Teuchos::View, *vv, curDim_-1);
       MVT::MvTransMv(one, *mV_k1, *V_k, vv_k);
 
       // vtA_k = tV_k vA_k
       LVector vta_k(Teuchos::View, *vta);
       Teuchos::Range1D range_k (0, curDim_);
-      RCP<const MV> mV_k = MVT::CloneView(*V, range_k);
-      MVT::MvTransMv(one, *mV_k, *V_A, vta_k);
+      RCP<const MV> mV_k = MVT::CloneView(*V_, range_k);
+      MVT::MvTransMv(one, *mV_k, *VA_, vta_k);
 
       // Extract submatrix L_k-1
-      LMatrix L_k1(Teuchos::View, *L, curDim_-1, curDim_-1);
-      LVector l_k = Teuchos::getCol<int, ScalarType>(Teuchos::View, *L, curDim_);
+      LMatrix L_k1(Teuchos::View, *L_, curDim_-1, curDim_-1);
+      LVector l_k = Teuchos::getCol<int, ScalarType>(Teuchos::View, *L_, curDim_);
 
       // l_k = L_k-1 vv_k
       l_k.multiply(Teuchos::NO_TRANS, Teuchos::NO_TRANS, one, L_k1, vv_k, zero);
@@ -433,14 +543,14 @@ namespace Belos {
       ScalarType lkk = res[0];
 
       // L_k = L_k-1 union { -1/l_kk*ty_k , 1/l_kk}
-      LMatrix L_k(Teuchos::View, *L, curDim_, curDim_);
+      LMatrix L_k(Teuchos::View, *L_, curDim_, curDim_);
       for (int i = 0 ; i < curDim_-1 ; ++i) {
 	L_k(curDim_-1, i) = - y_k(i)/lkk;
       }
       L_k(curDim_-1, curDim_-1) = 1/lkk;
 
       // l_nu = L_k nu << recursive trick !
-      LVector nu_k1(Teuchos::View, *nu, curDim_-1);
+      LVector nu_k1(Teuchos::View, *nu_, curDim_-1);
 
       LVector l_nu(curDim_);
       // l_nu = ( L_k-1*nu_k-1 )
@@ -453,44 +563,44 @@ namespace Belos {
       l_A.multiply(Teuchos::NO_TRANS, Teuchos::NO_TRANS, one, L_k, vta_k, zero);
 
       // omega = dot(l_A, l_nu)
-      omega = l_A.dot(l_nu);
+      omega_ = l_A.dot(l_nu);
 
       // alpha = |vA_k|^2 - |l_A|^2
-      MVT::MvDot(*V_A, *V_A, res);
-      alpha = res[0] - l_A.dot(l_A);
+      MVT::MvDot(*VA_, *VA_, res);
+      alpha_ = res[0] - l_A.dot(l_A);
 
       // h(1:k, k) = tL_k (l_A + alpha/omega l_nu)
-      LMatrix H_k(Teuchos::View, *H, curDim_, curDim_);
+      LMatrix H_k(Teuchos::View, *H_, curDim_, curDim_);
       LVector h_k = Teuchos::getCol<int, ScalarType>(Teuchos::View, H_k, curDim_);
 
       h_k = l_A;
-      l_nu *= alpha/omega;
+      l_nu *= alpha_/omega_;
       h_k += l_nu;
       h_k.multiply(Teuchos::TRANS, Teuchos::NO_TRANS, one, L_k, h_k, zero);
 
       // v_tilde = vA_k - V_k h(1:k,k)
       // column[0] == k
-      V_tilde = MVT::CloneViewNonConst(*V_A, column);
+      V_tilde = MVT::CloneViewNonConst(*VA_, column);
       MVT::MvTimesMatAddMv(-one, *V_k, h_k, one, *V_tilde);
       // h(k_+1, k) = |v_tilde|^2
       MVT::MvNorm(*V_tilde, res, TwoNorm);
-      (*H)(curDim_+1, curDim_) = res[0];
+      (*H_)(curDim_+1, curDim_) = res[0];
 
       // nu(1, k+1) = -1/(h(k+1,k) tnu h(1:k, k)
-      LVector nu_k(Teuchos::View, *nu, curDim_);
-      (*nu)(curDim_+1) = -1/(*H)(curDim_+1, curDim_) * nu_k.dot(h_k);
+      LVector nu_k(Teuchos::View, *nu_, curDim_);
+      (*nu_)(curDim_+1) = -1/(*H_)(curDim_+1, curDim_) * nu_k.dot(h_k);
 
       // nu = (nu(1,1) ... nu(1,k+1))
       // Nothing to do.
 
       // v_k+1 = 1/h(k+1, k) v_tilde
       column[0] = curDim_ + 1;
-      RCP<MV> V_kp1 = MVT::CloneViewNonConst(*V, column);
-      MVT::MvAddMv(1/(*H)(curDim_+1, curDim_), *V_tilde, zero, *V_tilde, *V_kp1);
+      RCP<MV> V_kp1 = MVT::CloneViewNonConst(*V_, column);
+      MVT::MvAddMv(1/(*H_)(curDim_+1, curDim_), *V_tilde, zero, *V_tilde, *V_kp1);
 
       // vA_k+1 = A v_k+1
       // CC: Check if it can work with a preconditionner
-      lp_->apply(*V_A, *V_kp1);
+      lp_->apply(*VA_, *V_kp1);
 
     } // end while (sTest_->checkStatus(this) != Passed)
   }

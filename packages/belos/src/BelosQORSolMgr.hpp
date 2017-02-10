@@ -1080,38 +1080,11 @@ ReturnType QORSolMgr<ScalarType,MV,OP>::solve() {
             problem_->updateSolution( update, true );
 
             // Get the state.
-            QORIterationState<ScalarType,MV> oldState = qor_iter->getState();
-
-            // Set the new state.
-            QORIterationState<ScalarType,MV> newstate;
-            newstate.V.resize(currRHSIdx.size());
-            newstate.Z.resize(currRHSIdx.size());
-
-            // Compute the restart vectors
-            // NOTE: Force the linear problem to update the current residual since the solution was updated.
-            R_0 = MVT::Clone( *(problem_->getInitPrecResVec()), currRHSIdx.size() );
-            problem_->computeCurrPrecResVec( &*R_0 );
-            for (unsigned int i=0; i<currRHSIdx.size(); ++i) {
-              index[0] = i;  // index(1) vector declared on line 891
-
-              tmpV = MVT::CloneViewNonConst( *R_0, index );
-
-              // Get a matrix to hold the orthonormalization coefficients.
-              Teuchos::RCP<Teuchos::SerialDenseVector<int,ScalarType> > tmpZ
-                = Teuchos::rcp( new Teuchos::SerialDenseVector<int,ScalarType>( 1 ));
-
-              // Orthonormalize the new V_0
-              int rank = ortho_->normalize( *tmpV, tmpZ );
-              TEUCHOS_TEST_FOR_EXCEPTION(rank != 1 ,QORSolMgrOrthoFailure,
-                  "Belos::QORSolMgr::solve(): Failed to compute initial block of orthonormal vectors after the restart.");
-
-              newstate.V[i] = tmpV;
-              newstate.Z[i] = tmpZ;
-            }
+            QORIterationState<ScalarType,MV> state = qor_iter->getState();
 
             // Initialize the solver.
-            newstate.curDim = 0;
-            qor_iter->initialize(newstate);
+            state.curDim = 0;
+            qor_iter->initialize(state);
 
           } // end of restarting
 
