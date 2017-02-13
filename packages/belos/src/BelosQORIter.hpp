@@ -360,7 +360,14 @@ namespace Belos {
   {
     bool simple_restore = true;
     if (newstate.V.is_null()) {
-      V_ = MVT::Clone(*lp_->getRHS(), numBlocks_);
+      V_ = MVT::Clone(*lp_->getRHS(), numBlocks_); // V is not initialized
+
+      // Copy RHS in the first column.
+      std::vector<int> column(1);
+      column[0] = 0;
+      Teuchos::RCP<MV> V0 = MVT::CloneViewNonConst(*V_, column);
+      MVT::MvAddMv(SCT::one(), *(lp_->getRHS()), SCT::zero(), *V0, *V0);
+
       simple_restore = false;
     }
     else {
@@ -399,6 +406,9 @@ namespace Belos {
       nu_ = newstate.nu;
     }
 
+    if (omega_ != newstate.omega) simple_restore = false;
+    if (alpha_ != newstate.alpha) simple_restore = false;
+
     omega_ = newstate.omega;
     alpha_ = newstate.alpha;
     if (newstate.curDim != curDim_) {
@@ -432,6 +442,7 @@ namespace Belos {
 
     Teuchos::RCP<MV> V0 = MVT::CloneViewNonConst(*V_, column);
 
+    MVT::MvPrint(*V0, std::cerr);
     std::vector<MagnitudeType> norm(1);
     MVT::MvNorm(*V0, norm, TwoNorm);
     MVT::MvScale(*V0, 1/norm[0]);
@@ -626,11 +637,10 @@ namespace Belos {
     ScalarType n = nu_k.dot(nu_k);
     (*norms)[0] = SCT::squareroot(n);
 
-    std::cerr << " curDim_ =" << curDim_ << " res = "  << (*norms)[0] << std::endl;
     return Teuchos::null;
   }
 
-  
+
 
 } // end Belos namespace
 
