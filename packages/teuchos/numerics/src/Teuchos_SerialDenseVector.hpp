@@ -57,7 +57,8 @@
 namespace Teuchos {
 
   template<typename OrdinalType, typename ScalarType>
-  class SerialDenseVector : public SerialDenseMatrix<OrdinalType,ScalarType> {
+  class
+  SerialDenseVector : public SerialDenseMatrix<OrdinalType,ScalarType> {
 
   public:
     //! @name Constructor/Destructor methods.
@@ -249,7 +250,7 @@ namespace Teuchos {
 
   template<typename OrdinalType, typename ScalarType>
   SerialDenseVector<OrdinalType, ScalarType>::SerialDenseVector(DataAccess CV,const SerialDenseVector<OrdinalType, ScalarType> &Source, OrdinalType numRows, OrdinalType startRow) :
-    SerialDenseMatrix<OrdinalType,ScalarType>( CV, Source, numRows, Teuchos::OrdinalTraits<OrdinalType>::zero(), startRow) {}
+    SerialDenseMatrix<OrdinalType,ScalarType>( CV, Source, numRows, Teuchos::OrdinalTraits<OrdinalType>::one(), startRow) {}
   
   template<typename OrdinalType, typename ScalarType>
   SerialDenseVector<OrdinalType, ScalarType>::~SerialDenseVector() {}
