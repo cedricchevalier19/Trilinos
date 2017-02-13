@@ -862,7 +862,7 @@ bool QORSolMgr<ScalarType,MV,OP>::checkStatusTest() {
 
     // Implicit residual test, using the native residual to determine if convergence was achieved.
     Teuchos::RCP<StatusTestGenResNorm_t> tmpImpConvTest =
-      Teuchos::rcp( new StatusTestGenResNorm_t( convtol_, defQuorum_ ) );
+      Teuchos::rcp( new StatusTestGenResNorm_t( convtol_, 1 ) );
     if(impResScale_ == "User Provided")
       tmpImpConvTest->defineScaleForm( convertStringToScaleType(impResScale_), Belos::TwoNorm, resScaleFactor_ );
     else
@@ -873,7 +873,7 @@ bool QORSolMgr<ScalarType,MV,OP>::checkStatusTest() {
 
     // Explicit residual test once the native residual is below the tolerance
     Teuchos::RCP<StatusTestGenResNorm_t> tmpExpConvTest =
-      Teuchos::rcp( new StatusTestGenResNorm_t( convtol_, defQuorum_ ) );
+      Teuchos::rcp( new StatusTestGenResNorm_t( convtol_, 1 ) );
     tmpExpConvTest->defineResForm( StatusTestGenResNorm_t::Explicit, Belos::TwoNorm );
     if(expResScale_ == "User Provided")
       tmpExpConvTest->defineScaleForm( convertStringToScaleType(expResScale_), Belos::TwoNorm, resScaleFactor_ );
@@ -890,7 +890,7 @@ bool QORSolMgr<ScalarType,MV,OP>::checkStatusTest() {
     // Implicit residual test, using the native residual to determine if convergence was achieved.
     // Use test that checks for loss of accuracy.
     Teuchos::RCP<StatusTestImpResNorm_t> tmpImpConvTest =
-      Teuchos::rcp( new StatusTestImpResNorm_t( convtol_, defQuorum_ ) );
+      Teuchos::rcp( new StatusTestImpResNorm_t( convtol_, 1 ) );
     if(impResScale_ == "User Provided")
       tmpImpConvTest->defineScaleForm( convertStringToScaleType(impResScale_), Belos::TwoNorm, resScaleFactor_ );
     else
@@ -1029,7 +1029,7 @@ ReturnType QORSolMgr<ScalarType,MV,OP>::solve() {
       while(1) {
 
         // tell qor_iter to iterate
-        try {
+        //try {
           qor_iter->iterate();
 
           ////////////////////////////////////////////////////////////////////////////////////
@@ -1099,13 +1099,13 @@ ReturnType QORSolMgr<ScalarType,MV,OP>::solve() {
             TEUCHOS_TEST_FOR_EXCEPTION(true,std::logic_error,
                 "Belos::QORSolMgr::solve(): Invalid return from QORIter::iterate().");
           }
-        }
-        catch (const std::exception &e) {
-          printer_->stream(Errors) << "Error! Caught std::exception in QORIter::iterate() at iteration "
-                                   << qor_iter->getNumIters() << std::endl
-                                   << e.what() << std::endl;
-          throw;
-        }
+	  //}
+        // catch (const std::exception &e) {
+        //   printer_->stream(Errors) << "Error! Caught std::exception in QORIter::iterate() at iteration "
+        //                            << qor_iter->getNumIters() << std::endl
+        //                            << e.what() << std::endl;
+	//          throw;
+        //}
       }
 
       // Compute the current solution.
