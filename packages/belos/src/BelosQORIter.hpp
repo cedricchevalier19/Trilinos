@@ -265,7 +265,7 @@ namespace Belos {
     //! Get the dimension of the search subspace used to generate the current solution to the linear problem.
     int getCurSubspaceDim() const {
       if (!initialized_) return 0;
-      return curDim_;
+      return curDim_ + 1; // +1 because 0..curDim_
     };
 
     //! Get the maximum dimension allocated for the search subspace.
@@ -502,6 +502,7 @@ namespace Belos {
     RCP<LVector> vta = rcp(new LVector(numBlocks_));
     RCP<LVector> vv = rcp(new LVector(numBlocks_));
     RCP<LVector> y = rcp(new LVector(numBlocks_));
+    RCP<LVector> lk = rcp(new LVector(numBlocks_));
 
     // Allocate memory for scalars.
     std::vector<ScalarType> res(1);
@@ -513,7 +514,7 @@ namespace Belos {
     ////////////////////////////////////////////////////////////////
     // Iterate until the status test tells us to stop.
     //
-    while ((stest_->checkStatus(this) != Passed) && (curDim_ <= numBlocks_ - 1)) {
+    while ((stest_->checkStatus(this) != Passed) && (curDim_ < (numBlocks_ - 1))) {
       iter_++;
 
       // vv_k = tV_k-1 v_k
@@ -533,8 +534,7 @@ namespace Belos {
 
       // Extract submatrix L_k-1
       LMatrix L_k1(Teuchos::View, *L_, curDim_, curDim_);  // dim = k
-      LVector cl_k = Teuchos::getCol<int, ScalarType>(Teuchos::View, *L_, curDim_); // column k
-      LVector l_k(Teuchos::View, cl_k, curDim_); // Take only the k-1 first elements.
+      LVector l_k(Teuchos::View, *lk, curDim_); // Take only the k-1 first elements.
 
       // l_k = L_k-1 vv_k
       l_k.multiply(Teuchos::NO_TRANS, Teuchos::NO_TRANS, one, L_k1, vv_k, zero);
@@ -555,7 +555,7 @@ namespace Belos {
 
       // L_k = L_k-1 union { -1/l_kk*ty_k , 1/l_kk}
       LMatrix L_k(Teuchos::View, *L_, curDim_+1, curDim_+1); // dim = k+1
-      for (int i = 0 ; i < curDim_-1 ; ++i) {
+      for (int i = 0 ; i < curDim_ - 1 ; ++i) {
 	L_k(curDim_, i) = - y_k(i)/lkk;
       }
       L_k(curDim_, curDim_) = 1/lkk;
