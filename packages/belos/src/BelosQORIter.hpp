@@ -633,9 +633,7 @@ namespace Belos {
     if ((int)norms->size() < 1 )
       norms->resize( 1 );
 
-    LVector nu_k(Teuchos::View, *nu_, curDim_);
-    ScalarType n = nu_k.dot(nu_k);
-    (*norms)[0] = SCT::squareroot(n);
+    (*norms)[0] = 1/std::abs((*nu_)[curDim_]);
 
     return Teuchos::null;
   }
