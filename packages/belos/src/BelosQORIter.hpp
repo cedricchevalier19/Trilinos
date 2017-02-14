@@ -449,7 +449,7 @@ namespace Belos {
 
     lp_->apply(*V0, *VA_);
 
-    L_ = rcp(new LMatrix(numBlocks_, numBlocks_));
+    L_ = rcp(new LMatrix(numBlocks_, numBlocks_, true)); // put zero everywhere
     (*L_)(0,0) = one;
 
     std::vector<ScalarType> dot(1);
@@ -459,7 +459,7 @@ namespace Belos {
     MVT::MvDot(*VA_, *VA_, dot);
     alpha_ = dot[0] - omega_*omega_;
 
-    H_ = rcp(new LMatrix(numBlocks_, numBlocks_));
+    H_ = rcp(new LMatrix(numBlocks_, numBlocks_, true)); // put zero everywhere
     (*H_)(0,0) = omega_ + alpha_/omega_;
     (*nu_)(0) = one; // CC: not in the paper
 
@@ -553,6 +553,10 @@ namespace Belos {
       MVT::MvNorm(*PV_k, res);
       ScalarType lkk = res[0];
 
+      if (lkk <= SCT::sfmin()) {
+	throw "lkk is null";
+      }
+
       // L_k = L_k-1 union { -1/l_kk*ty_k , 1/l_kk}
       LMatrix L_k(Teuchos::View, *L_, curDim_+1, curDim_+1); // dim = k+1
       for (int i = 0 ; i < curDim_ - 1 ; ++i) {
@@ -576,6 +580,10 @@ namespace Belos {
 
       // omega = dot(l_A, l_nu)
       omega_ = l_A.dot(l_nu);
+
+      if (std::abs(omega_) <= SCT::sfmin()) {
+	throw "omega is null";
+      }
 
       // alpha = |vA_k|^2 - |l_A|^2
       MVT::MvDot(*VA_, *VA_, res);
