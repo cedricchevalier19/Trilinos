@@ -247,8 +247,7 @@ namespace Belos {
     //! Get the current update to the linear system.
     /*! \note This method returns a null pointer because the linear problem is current.
     */
-    // amk TODO: what is this supposed to be doing?
-    Teuchos::RCP<MV> getCurrentUpdate() const { return Teuchos::null; }
+    Teuchos::RCP<MV> getCurrentUpdate() const;
 
     //@}
 
@@ -293,6 +292,8 @@ namespace Belos {
     //! Restore a state and return whether a formal initialization is necessary.
     bool _simplyRestore(QORIterationState<ScalarType,MV>& newstate);
 
+    void _updateUpperH(std::vector<ScalarType>& cs, std::vector<ScalarType>& sn);
+
   private:
     //
     // Classes inputed through constructor that define the linear problem to be solved.
@@ -335,6 +336,7 @@ namespace Belos {
     ScalarType alpha_;
 
     Teuchos::RCP<LVector> nu_;
+    Teuchos::RCP<LVector> z_; // RHS for Hessenberg, rotated by Givens rotations
   };
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -361,12 +363,6 @@ namespace Belos {
     bool simple_restore = true;
     if (newstate.V.is_null()) {
       V_ = MVT::Clone(*lp_->getRHS(), numBlocks_); // V is not initialized
-
-      // Copy RHS in the first column.
-      std::vector<int> column(1);
-      column[0] = 0;
-      Teuchos::RCP<MV> V0 = MVT::CloneViewNonConst(*V_, column);
-      MVT::MvAddMv(SCT::one(), *(lp_->getRHS()), SCT::zero(), *V0, *V0);
 
       simple_restore = false;
     }
@@ -437,12 +433,15 @@ namespace Belos {
 
     curDim_ = 1;
 
+    // Copy RHS in the first column.
     std::vector<int> column(1);
     column[0] = 0;
-
     Teuchos::RCP<MV> V0 = MVT::CloneViewNonConst(*V_, column);
 
-    MVT::MvPrint(*V0, std::cerr);
+    // Compute current residual
+    lp_->apply(*(lp_->getLHS()), *V0);
+    MVT::MvAddMv(SCT::one(), *(lp_->getRHS()), -SCT::one(), *V0, *V0);
+
     std::vector<MagnitudeType> norm(1);
     MVT::MvNorm(*V0, norm, TwoNorm);
     MVT::MvScale(*V0, 1/norm[0]);
@@ -477,6 +476,9 @@ namespace Belos {
 
     (*nu_)(1) = - (*H_)(0,0)/(*H_)(1,0);
 
+    z_ = Teuchos::rcp(new LVector(numBlocks_), true); // Initialized to 0
+    (*z_)(0) = SCT::one();
+
     initialized_ = true;
   }
 
@@ -506,6 +508,10 @@ namespace Belos {
 
     // Allocate memory for scalars.
     std::vector<ScalarType> res(1);
+
+    // Givens' rotations coefficents
+    std::vector<ScalarType> cs(numBlocks_);
+    std::vector<ScalarType> sn(numBlocks_);
 
     // Create convenience variable for one.
     const ScalarType one  = Teuchos::ScalarTraits<ScalarType>::one();
@@ -623,6 +629,8 @@ namespace Belos {
       // CC: Check if it can work with a preconditionner
       lp_->apply(*VA_, *V_kp1);
 
+      _updateUpperH(cs, sn);
+
       curDim_++;
     } // end while (sTest_->checkStatus(this) != Passed)
   }
@@ -641,11 +649,79 @@ namespace Belos {
     if ((int)norms->size() < 1 )
       norms->resize( 1 );
 
+
+    LVector nu_k(Teuchos::View, *nu_, curDim_+1);
+
     (*norms)[0] = 1/std::abs((*nu_)[curDim_]);
+
+    std::cerr << "nu_k" << nu_k;
+    std::cerr << "norm = " << (*norms)[0] << std::endl;
 
     return Teuchos::null;
   }
 
+  template <class ScalarType, class MV, class OP>
+  Teuchos::RCP<MV> QORIter<ScalarType,MV,OP>::getCurrentUpdate() const
+  {
+    //
+    // If this is the first iteration of the Arnoldi factorization,
+    // there is no update, so return Teuchos::null.
+    //
+    Teuchos::RCP<MV> currentUpdate = Teuchos::null;
+    if (curDim_==0) {
+      return currentUpdate;
+    }
+
+    const ScalarType one  = Teuchos::ScalarTraits<ScalarType>::one();
+    const ScalarType zero = Teuchos::ScalarTraits<ScalarType>::zero();
+
+    currentUpdate = MVT::Clone( *V_, 1);
+    //
+    //  Make a view and then copy the RHS of the least squares problem.  DON'T OVERWRITE IT!
+    //
+    LVector y(Teuchos::Copy, *z_, curDim_);
+
+    Teuchos::BLAS<int,ScalarType> blas;
+
+    //
+    // Solve the "H" problem
+    //
+    blas.TRSM( Teuchos::LEFT_SIDE, Teuchos::UPPER_TRI, Teuchos::NO_TRANS,
+	       Teuchos::NON_UNIT_DIAG, curDim_, 1, one,
+	       H_->values(), H_->stride(), y.values(), y.stride() );
+    //
+    //  Compute the current update.
+    //
+    Teuchos::Range1D range_k (0, curDim_-1);
+    Teuchos::RCP<const MV> Vjp1 = MVT::CloneView( *V_, range_k);
+    MVT::MvTimesMatAddMv( one, *Vjp1, y, zero, *currentUpdate );
+
+    return currentUpdate;
+  }
+
+  template <class ScalarType, class MV, class OP>
+  void QORIter<ScalarType,MV,OP>::_updateUpperH(std::vector<ScalarType>& cs, std::vector<ScalarType>& sn)
+  {
+     Teuchos::BLAS<int,ScalarType> blas;
+    //
+    // QR factorization of Least-Squares system with Givens rotations
+    //
+    for (int i=0; i<curDim_; i++) {
+      //
+      // Apply previous Givens rotations to new column of Hessenberg matrix
+      //
+      blas.ROT( 1, &(*H_)(i,curDim_), 1, &(*H_)(i+1, curDim_), 1, &cs[i], &sn[i] );
+    }
+    //
+    // Calculate new Givens rotation
+    //
+    blas.ROTG( &(*H_)(curDim_,curDim_), &(*H_)(curDim_+1,curDim_), &cs[curDim_], &sn[curDim_] );
+    (*H_)(curDim_+1,curDim_) = SCT::zero();
+    //
+    // Update RHS w/ new transformation
+    //
+    blas.ROT( 1, &(*z_)(curDim_), 1, &(*z_)(curDim_+1), 1, &cs[curDim_], &sn[curDim_] );
+  }
 
 
 } // end Belos namespace
