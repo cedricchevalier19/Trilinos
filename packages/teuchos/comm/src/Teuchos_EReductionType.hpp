@@ -47,7 +47,7 @@
 
 #include "Teuchos_config.h"
 #ifdef HAVE_TEUCHOS_MPI
-#  include "mpi.h" // need this for MPI_Op (see below)
+#  include <mpi.h> // need this for MPI_Op (see below)
 #endif // HAVE_TEUCHOS_MPI
 
 namespace Teuchos {
@@ -72,7 +72,8 @@ enum EReductionType {
   REDUCE_SUM, ///< Sum
   REDUCE_MIN, ///< Min
   REDUCE_MAX, ///< Max
-  REDUCE_AND  ///< Logical AND
+  REDUCE_AND, ///< Logical AND
+  REDUCE_BOR  ///< Bitwise OR
 };
 
 /// \brief Convert EReductionType to string representation.

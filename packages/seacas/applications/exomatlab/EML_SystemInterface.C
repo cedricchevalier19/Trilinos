@@ -41,12 +41,13 @@
 #include <Ioss_FileInfo.h> // for FileInfo
 #include <algorithm>       // for sort, transform
 #include <ctype.h>         // for tolower
+#include <iosfwd>          // for ostream
 #include <iostream>        // for operator<<, basic_ostream, etc
 #include <stddef.h>        // for size_t
-#include <stdlib.h>        // for nullptr, exit, strtod, etc
+#include <stdlib.h>        // for exit, strtod, EXIT_SUCCESS, etc
 #include <string.h>        // for strcmp
 #include <utility>         // for pair, make_pair
-#include <vector>          // for vector, allocator, etc
+#include <vector>          // for vector
 
 namespace {
   void parse_variable_names(const char *tokens, StringIdVector *variable_list);
@@ -121,8 +122,9 @@ void SystemInterface::enroll_options()
 bool SystemInterface::parse_options(int argc, char **argv)
 {
   int option_index = options_.parse(argc, argv);
-  if (option_index < 1)
+  if (option_index < 1) {
     return false;
+  }
 
   // Get options from environment variable also...
   char *options = getenv("exomatlab");
@@ -133,7 +135,7 @@ bool SystemInterface::parse_options(int argc, char **argv)
     options_.parse(options, options_.basename(*argv));
   }
 
-  if (options_.retrieve("help")) {
+  if (options_.retrieve("help") != nullptr) {
     options_.usage();
     std::cerr << "\n\tCan also set options via EXOMATLAB_OPTIONS environment variable.\n";
     std::cerr << "\n\t->->-> Send email to gdsjaar@sandia.gov for exomatlab support.<-<-<-\n";
@@ -141,7 +143,7 @@ bool SystemInterface::parse_options(int argc, char **argv)
     exit(EXIT_SUCCESS);
   }
 
-  if (options_.retrieve("version")) {
+  if (options_.retrieve("version") != nullptr) {
     // Version is printed up front, just exit...
     exit(0);
   }
@@ -195,17 +197,19 @@ bool SystemInterface::parse_options(int argc, char **argv)
 
   {
     const char *temp = options_.retrieve("minimum_time");
-    if (temp != nullptr)
+    if (temp != nullptr) {
       minimumTime_ = strtod(temp, nullptr);
+    }
   }
 
   {
     const char *temp = options_.retrieve("maximum_time");
-    if (temp != nullptr)
+    if (temp != nullptr) {
       maximumTime_ = strtod(temp, nullptr);
+    }
   }
 
-  if (options_.retrieve("copyright")) {
+  if (options_.retrieve("copyright") != nullptr) {
     std::cerr << "\n"
               << "Copyright(C) 2011 Sandia Corporation.  Under the terms of Contract\n"
               << "DE-AC04-94AL85000 with Sandia Corporation, the U.S. Government retains\n"

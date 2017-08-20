@@ -26,8 +26,10 @@ enum GroupingType {
 
 enum SamplingType {
   SAMPLING_STOKHOS=0,
+  SAMPLING_DAKOTA,
   SAMPLING_TASMANIAN,
-  SAMPLING_FILE
+  SAMPLING_FILE,
+  SAMPLING_VPS
 };
 
 struct CMD {

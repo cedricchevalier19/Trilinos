@@ -84,32 +84,7 @@ LOCA.TurningPoint.MinimallyAugmented supports the following classes:
 
 // Epetra includes
 #ifdef HAVE_EPETRA
-#include "Epetra_SerialComm.h"
-#ifdef HAVE_MPI
-#include "Epetra_MpiComm.h"
-#endif
-#include "Epetra_SerialDistributor.h"
-#include "Epetra_OffsetIndex.h"
-#include "Epetra_LocalMap.h"
-#include "Epetra_Import.h"
-#include "Epetra_Export.h"
-#include "Epetra_IntVector.h"
-#include "Epetra_Vector.h"
-#include "Epetra_FEVector.h"
-#include "Epetra_SerialDenseSVD.h"
-#include "Epetra_SerialDenseMatrix.h"
-#include "Epetra_SerialSymDenseMatrix.h"
-#include "Epetra_SerialDenseSolver.h"
-#include "Epetra_InvOperator.h"
-#include "Epetra_RowMatrix.h"
-#include "Epetra_BasicRowMatrix.h"
-#include "Epetra_CrsMatrix.h"
-#include "Epetra_FECrsMatrix.h"
-#include "Epetra_FEVbrMatrix.h"
-#include "Epetra_JadMatrix.h"
-#include "Epetra_LinearProblem.h"
-#include "Epetra_MapColoring.h"
-#include "Epetra_Time.h"
+#include "PyTrilinos_Epetra_Headers.hpp"
 #endif
 
 // LOCA includes
@@ -141,6 +116,14 @@ LOCA.TurningPoint.MinimallyAugmented supports the following classes:
 %teuchos_rcp(LOCA::TurningPoint::MooreSpence::FiniteDifferenceGroup)
 %teuchos_rcp(LOCA::TurningPoint::MinimallyAugmented::AbstractGroup)
 %teuchos_rcp(LOCA::TurningPoint::MinimallyAugmented::FiniteDifferenceGroup)
+
+%pythoncode
+%{
+import sys, os.path as op
+thisDir = op.dirname(op.abspath(__file__))
+if not thisDir in sys.path: sys.path.append(thisDir)
+del sys, op
+%}
 
 // Base class support
 %import "NOX.Abstract.i"

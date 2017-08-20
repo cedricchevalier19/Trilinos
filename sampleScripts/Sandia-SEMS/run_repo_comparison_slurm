@@ -30,10 +30,11 @@ mkdir build_updated
 cd build_updated
 export TRILINOS_PATH=${TRILINOS_UPDATED_PATH}
 
-echo "ctest" &> test_submitted_command
+echo "ulimit -c 0; ctest" &> test_submitted_command
+chmod a+x test_submitted_command
 
 echo "srun -J ${JOBNAME}-Conf1 -N 1 -p ${QUEUE} ${CONFIG_SCRIPT} &> config.output" &> config_command
-echo "srun -J ${JOBNAME}-Build1 -N 1 -p ${QUEUE} make -j 60 -k  &> build.output" &> build_command
+echo "srun -t 6:00:00 -J ${JOBNAME}-Build1 -N 1 -p ${QUEUE} make -j 60 -k  &> build.output" &> build_command
 echo "salloc -J ${JOBNAME}-Test1 -N 1 -n 4 --cpus-per-task=4 -p ${QUEUE} ./test_submitted_command &> test.output" &> test_command
 
 chmod a+x *_command
@@ -83,10 +84,11 @@ cd build_pristine
 
 export TRILINOS_PATH=${TRILINOS_PRISTINE_PATH}
 
-echo "ctest" &> test_submitted_command
+echo "ulimit -c 0; ctest" &> test_submitted_command
+chmod a+x test_submitted_command
 
 echo "srun -J ${JOBNAME}-Conf2 -N 1 -p ${QUEUE} ${CONFIG_SCRIPT} &> config.output" &> config_command
-echo "srun -J ${JOBNAME}-Build2 -N 1 -p ${QUEUE} make -j 60 -k  &> build.output" &> build_command
+echo "srun -t 6:00:00 -J ${JOBNAME}-Build2 -N 1 -p ${QUEUE} make -j 60 -k  &> build.output" &> build_command
 echo "salloc -J ${JOBNAME}-Test2 -N 1 -n 4 --cpus-per-task=4 -p ${QUEUE} ./test_submitted_command &> test.output" &> test_command
 
 

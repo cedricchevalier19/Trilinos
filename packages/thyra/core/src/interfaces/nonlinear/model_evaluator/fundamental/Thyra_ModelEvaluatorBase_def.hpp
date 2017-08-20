@@ -382,6 +382,12 @@ void ModelEvaluatorBase::InArgs<Scalar>::setArgs(
     if(supports(IN_ARG_stage_number) || !ignoreUnsupported)
       set_stage_number(inArgs.get_stage_number());
   }
+  // Extended inArgs
+  if (extended_inargs_.size() > 0)
+    TEUCHOS_TEST_FOR_EXCEPTION(cloneObjects,
+                               std::runtime_error,
+                               "Extended InArgs does not support cloning!");
+  this->extended_inargs_ = inArgs.extended_inargs_;
 }
 
 
@@ -593,7 +599,6 @@ void ModelEvaluatorBase::InArgs<Scalar>::_setUnsupportsAndRelated(
         true ,std::logic_error,
         "Error, can not handle args other than IN_ARG_x yet!"
         );
-      break;
   }
   this->_setSupports(arg,false);
 }
@@ -1419,6 +1424,9 @@ void ModelEvaluatorBase::OutArgs<Scalar>::setArgs(
       }
     }
   }
+  // Extended outArgs
+  this->extended_outargs_ = inputOutArgs.extended_outargs_;
+
   // ToDo: Add more args as needed!
 }
 
@@ -1990,6 +1998,8 @@ void ModelEvaluatorBase::OutArgs<Scalar>::_setSupports(
     this->_set_W_properties(inputOutArgs.get_W_properties());
   if(this->supports(OUT_ARG_W_mp))
     this->_set_W_properties(inputOutArgs.get_W_properties());  //JF should this be W_mp_properties?
+
+  extended_outargs_ = inputOutArgs.extended_outargs_;
 }
 
 
@@ -2020,7 +2030,6 @@ void ModelEvaluatorBase::OutArgs<Scalar>::_setUnsupportsAndRelated(
         true ,std::logic_error,
         "Error, can not handle args other than IN_ARG_x yet!"
         );
-      break;
   }
 }
 
@@ -2054,7 +2063,6 @@ void ModelEvaluatorBase::OutArgs<Scalar>::_setUnsupportsAndRelated(
         true ,std::logic_error,
         "Error, can not handle args other than OUT_ARG_f yet!"
         );
-      break;
   }
   this->_setSupports(arg,false);
 }

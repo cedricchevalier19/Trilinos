@@ -1,13 +1,13 @@
 /*
 //@HEADER
 // ************************************************************************
-// 
+//
 //                        Kokkos v. 2.0
 //              Copyright (2014) Sandia Corporation
-// 
+//
 // Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
 // the U.S. Government retains certain rights in this software.
-// 
+//
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -36,7 +36,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Questions? Contact  H. Carter Edwards (hcedwar@sandia.gov)
-// 
+//
 // ************************************************************************
 //@HEADER
 */
@@ -45,11 +45,10 @@
 #define KOKKOS_CUDAEXEC_HPP
 
 #include <Kokkos_Macros.hpp>
-
-/* only compile this file if CUDA is enabled for Kokkos */
-#ifdef KOKKOS_HAVE_CUDA
+#ifdef KOKKOS_ENABLE_CUDA
 
 #include <string>
+#include <cstdint>
 #include <Kokkos_Parallel.hpp>
 #include <impl/Kokkos_Error.hpp>
 #include <Cuda/Kokkos_Cuda_abort.hpp>
@@ -99,6 +98,8 @@ CudaSpace::size_type cuda_internal_maximum_warp_count();
 CudaSpace::size_type cuda_internal_maximum_grid_count();
 CudaSpace::size_type cuda_internal_maximum_shared_words();
 
+CudaSpace::size_type cuda_internal_maximum_concurrent_block_count();
+
 CudaSpace::size_type * cuda_internal_scratch_flags( const CudaSpace::size_type size );
 CudaSpace::size_type * cuda_internal_scratch_space( const CudaSpace::size_type size );
 CudaSpace::size_type * cuda_internal_scratch_unified( const CudaSpace::size_type size );
@@ -112,7 +113,7 @@ CudaSpace::size_type * cuda_internal_scratch_unified( const CudaSpace::size_type
 #if defined( __CUDACC__ )
 
 /** \brief  Access to constant memory on the device */
-#ifdef KOKKOS_CUDA_USE_RELOCATABLE_DEVICE_CODE
+#ifdef KOKKOS_ENABLE_CUDA_RELOCATABLE_DEVICE_CODE
 
 __device__ __constant__
 extern unsigned long kokkos_impl_cuda_constant_memory_buffer[] ;
@@ -131,11 +132,12 @@ namespace Impl {
     int* atomic;
     int* scratch;
     int* threadid;
+    int n;
   };
 }
 }
 __device__ __constant__
-#ifdef KOKKOS_CUDA_USE_RELOCATABLE_DEVICE_CODE
+#ifdef KOKKOS_ENABLE_CUDA_RELOCATABLE_DEVICE_CODE
 extern
 #endif
 Kokkos::Impl::CudaLockArraysStruct kokkos_impl_cuda_lock_arrays ;
@@ -145,7 +147,7 @@ Kokkos::Impl::CudaLockArraysStruct kokkos_impl_cuda_lock_arrays ;
 
 namespace Kokkos {
 namespace Impl {
-  void* cuda_resize_scratch_space(size_t bytes, bool force_shrink = false);
+  void* cuda_resize_scratch_space(std::int64_t bytes, bool force_shrink = false);
 }
 }
 
@@ -245,11 +247,12 @@ struct CudaParallelLaunch< DriverType , true > {
       // Copy functor to constant memory on the device
       cudaMemcpyToSymbol( kokkos_impl_cuda_constant_memory_buffer , & driver , sizeof(DriverType) );
 
-      #ifndef KOKKOS_CUDA_USE_RELOCATABLE_DEVICE_CODE
+      #ifndef KOKKOS_ENABLE_CUDA_RELOCATABLE_DEVICE_CODE
       Kokkos::Impl::CudaLockArraysStruct locks;
       locks.atomic = atomic_lock_array_cuda_space_ptr(false);
       locks.scratch = scratch_lock_array_cuda_space_ptr(false);
       locks.threadid = threadid_lock_array_cuda_space_ptr(false);
+      locks.n = Kokkos::Cuda::concurrency();
       cudaMemcpyToSymbol( kokkos_impl_cuda_lock_arrays , & locks , sizeof(CudaLockArraysStruct) );
       #endif
 
@@ -287,11 +290,12 @@ struct CudaParallelLaunch< DriverType , false > {
       }
       #endif
 
-      #ifndef KOKKOS_CUDA_USE_RELOCATABLE_DEVICE_CODE
+      #ifndef KOKKOS_ENABLE_CUDA_RELOCATABLE_DEVICE_CODE
       Kokkos::Impl::CudaLockArraysStruct locks;
       locks.atomic = atomic_lock_array_cuda_space_ptr(false);
       locks.scratch = scratch_lock_array_cuda_space_ptr(false);
       locks.threadid = threadid_lock_array_cuda_space_ptr(false);
+      locks.n = Kokkos::Cuda::concurrency();
       cudaMemcpyToSymbol( kokkos_impl_cuda_lock_arrays , & locks , sizeof(CudaLockArraysStruct) );
       #endif
 
@@ -314,5 +318,6 @@ struct CudaParallelLaunch< DriverType , false > {
 //----------------------------------------------------------------------------
 
 #endif /* defined( __CUDACC__ ) */
-#endif /* defined( KOKKOS_HAVE_CUDA ) */
+#endif /* defined( KOKKOS_ENABLE_CUDA ) */
 #endif /* #ifndef KOKKOS_CUDAEXEC_HPP */
+

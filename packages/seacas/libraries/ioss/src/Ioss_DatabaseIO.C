@@ -30,9 +30,9 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include <Ioss_BoundingBox.h>
 #include <Ioss_CodeTypes.h>
 #include <Ioss_DatabaseIO.h>
-#include <Ioss_ElementBlock.h>
 #include <Ioss_ElementTopology.h>
 #include <Ioss_EntityBlock.h>
 #include <Ioss_FileInfo.h>
@@ -44,31 +44,27 @@
 #include <algorithm>
 #include <cassert>
 #include <cfloat>
+#include <cstddef>
 #include <cstring>
 #include <iomanip>
 #include <iostream>
 #include <iterator>
 #include <set>
-#include <stddef.h>
 #include <string>
 #include <sys/stat.h>
 #include <tokenize.h>
 #include <utility>
 #include <vector>
 
-#include "Ioss_DBUsage.h"
-#include "Ioss_Field.h"
-#include "Ioss_GroupingEntity.h"
-#include "Ioss_Property.h"
-#include "Ioss_SerializeIO.h"
-#include "Ioss_SideBlock.h"
-#include "Ioss_SideSet.h"
-#include "Ioss_State.h"
-#include "Ioss_SurfaceSplit.h"
-
-#ifdef HAVE_MPI
-#include <mpi.h>
-#endif
+#include <Ioss_DBUsage.h>
+#include <Ioss_Field.h>
+#include <Ioss_GroupingEntity.h>
+#include <Ioss_Property.h>
+#include <Ioss_SerializeIO.h>
+#include <Ioss_SideBlock.h>
+#include <Ioss_SideSet.h>
+#include <Ioss_State.h>
+#include <Ioss_SurfaceSplit.h>
 
 namespace {
   void log_field(const char *symbol, const Ioss::GroupingEntity *entity, const Ioss::Field &field,
@@ -153,14 +149,14 @@ namespace Ioss {
   DatabaseIO::DatabaseIO(Region *region, std::string filename, DatabaseUsage db_usage,
                          MPI_Comm communicator, const PropertyManager &props)
       : properties(props), commonSideTopology(nullptr), DBFilename(std::move(filename)),
-        dbState(STATE_INVALID), isParallel(false), myProcessor(0),
-        cycleCount(0), overlayCount(0), timeScaleFactor(1.0), splitType(SPLIT_BY_TOPOLOGIES),
-        dbUsage(db_usage), dbIntSizeAPI(USE_INT32_API), lowerCaseVariableNames(true),
+        dbState(STATE_INVALID), isParallel(false), myProcessor(0), cycleCount(0), overlayCount(0),
+        timeScaleFactor(1.0), splitType(SPLIT_BY_TOPOLOGIES), dbUsage(db_usage),
+        dbIntSizeAPI(USE_INT32_API), lowerCaseVariableNames(true), usingParallelIO(false),
         util_(communicator), region_(region), isInput(is_input_event(db_usage)),
         isParallelConsistent(true),
         singleProcOnly(db_usage == WRITE_HISTORY || db_usage == WRITE_HEARTBEAT ||
                        SerializeIO::isEnabled()),
-        doLogging(false), useGenericCanonicalName(false)
+        doLogging(false), useGenericCanonicalName(false), ignoreDatabaseNames(false)
   {
     isParallel  = util_.parallel_size() > 1;
     myProcessor = util_.parallel_rank();
@@ -214,6 +210,22 @@ namespace Ioss {
       }
     }
 
+    if (properties.exists("SERIALIZE_IO")) {
+      int isize = properties.get("SERIALIZE_IO").get_int();
+      Ioss::SerializeIO::setGroupFactor(isize);
+      if (isize > 0) {
+        singleProcOnly = true;
+      }
+    }
+
+    if (properties.exists("SERIALIZE_IO")) {
+      int isize = properties.get("SERIALIZE_IO").get_int();
+      Ioss::SerializeIO::setGroupFactor(isize);
+      if (isize > 0) {
+        singleProcOnly = true;
+      }
+    }
+
     {
       bool logging;
       if (Utils::check_set_bool_property(properties, "LOGGING", logging)) {
@@ -224,6 +236,7 @@ namespace Ioss {
     Utils::check_set_bool_property(properties, "LOWER_CASE_VARIABLE_NAMES", lowerCaseVariableNames);
     Utils::check_set_bool_property(properties, "USE_GENERIC_CANONICAL_NAMES",
                                    useGenericCanonicalName);
+    Utils::check_set_bool_property(properties, "IGNORE_DATABASE_NAMES", ignoreDatabaseNames);
 
     {
       bool consistent;
@@ -317,7 +330,9 @@ namespace Ioss {
           continue;
         }
 
-        struct stat st;
+        struct stat st
+        {
+        };
         if (stat(path_root.c_str(), &st) != 0) {
           if (mkdir(path_root.c_str(), mode) != 0 && errno != EEXIST) {
             errmsg << "ERROR: Cannot create directory '" << path_root
@@ -362,12 +377,12 @@ namespace Ioss {
   }
 
   // Default versions do nothing...
-  bool DatabaseIO::begin_state(Region * /* region */, int /* state */, double /* time */)
+  bool DatabaseIO::begin_state__(Region * /* region */, int /* state */, double /* time */)
   {
     return true;
   }
 
-  bool DatabaseIO::end_state(Region * /* region */, int /* state */, double /* time */)
+  bool DatabaseIO::end_state__(Region * /* region */, int /* state */, double /* time */)
   {
     return true;
   }
@@ -471,7 +486,7 @@ namespace Ioss {
           size_t old_df_count = sbold->get_property("distribution_factor_count").get_int();
           if (old_df_count > 0) {
             std::string storage = "Real[";
-            storage += Utils::to_string(sbnew->topology()->number_nodes());
+            storage += std::to_string(sbnew->topology()->number_nodes());
             storage += "]";
             sbnew->field_add(
                 Field("distribution_factors", Field::REAL, storage, Field::MESH, side_count));
@@ -707,8 +722,8 @@ namespace Ioss {
 #include <sys/time.h>
 
 namespace {
-  static struct timeval tp;
-  static double         initial_time = -1.0;
+  struct timeval tp;
+  double         initial_time = -1.0;
 
   void log_field(const char *symbol, const Ioss::GroupingEntity *entity, const Ioss::Field &field,
                  bool single_proc_only, const Ioss::ParallelUtils &util)
@@ -736,13 +751,22 @@ namespace {
              << "]\t";
 
         int64_t total = 0;
-        // Now append each processors size onto the stream...
         for (auto &p_size : all_sizes) {
-          strm << std::setw(8) << p_size << ":";
           total += p_size;
         }
+        // Now append each processors size onto the stream...
+        if (util.parallel_size() > 4) {
+          auto min_max = std::minmax_element(all_sizes.begin(), all_sizes.end());
+          strm << " m:" << std::setw(8) << *min_max.first << " M:" << std::setw(8)
+               << *min_max.second << " A:" << std::setw(8) << total / all_sizes.size();
+        }
+        else {
+          for (auto &p_size : all_sizes) {
+            strm << std::setw(8) << p_size << ":";
+          }
+        }
         if (util.parallel_size() > 1) {
-          strm << std::setw(8) << total;
+          strm << " T:" << std::setw(8) << total;
         }
         strm << "\t" << name << "/" << field.get_name() << "\n";
         std::cout << strm.str();

@@ -34,23 +34,25 @@
 #define IOSS_Ioss_IOUtils_h
 
 #include <Ioss_CodeTypes.h>
+#include <Ioss_Field.h>
 #include <algorithm> // for sort, lower_bound, copy, etc
-#include <assert.h>
+#include <cassert>
+#include <cstddef>   // for size_t
+#include <cstdint>   // for int64_t
 #include <cstdlib>   // for nullptrr
 #include <iostream>  // for ostringstream, etcstream, etc
-#include <stddef.h>  // for size_t
 #include <stdexcept> // for runtime_error
-#include <stdint.h>  // for int64_t
 #include <string>    // for string
 #include <vector>    // for vector
 namespace Ioss {
   class Field;
-}
+} // namespace Ioss
 namespace Ioss {
   class GroupingEntity;
   class Region;
   class SideBlock;
   class PropertyManager;
+  struct MeshCopyOptions;
 }
 
 #if __cplusplus > 199711L
@@ -83,10 +85,14 @@ namespace Ioss {
       }
     }
 
-    template <typename T> static void uniquify(std::vector<T> &vec)
+    template <typename T> static void uniquify(std::vector<T> &vec, bool skip_first = false)
     {
-      std::sort(vec.begin(), vec.end());
-      vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
+      auto it = vec.begin();
+      if (skip_first) {
+        it++;
+      }
+      std::sort(it, vec.end());
+      vec.erase(std::unique(it, vec.end()), vec.end());
       vec.shrink_to_fit();
     }
 
@@ -98,7 +104,7 @@ namespace Ioss {
         index[i] = sum;
         sum += cnt;
       }
-      index[index.size() - 1] = sum;
+      index.back() = sum;
     }
 
     template <typename T> static T find_index_location(T node, const std::vector<T> &index)
@@ -112,8 +118,9 @@ namespace Ioss {
       static size_t prev = 1;
 
       size_t nproc = index.size();
-      if (prev < nproc && index[prev - 1] <= node && index[prev] > node)
+      if (prev < nproc && index[prev - 1] <= node && index[prev] > node) {
         return prev - 1;
+      }
 
       for (size_t p = 1; p < nproc; p++) {
         if (index[p] > node) {
@@ -121,12 +128,20 @@ namespace Ioss {
           return p - 1;
         }
       }
+      std::cerr << "FATAL ERROR: find_index_location. Searching for " << node << " in:\n";
+      for (auto idx : index) {
+        std::cerr << idx << ", ";
+      }
+      std::cerr << "\n";
       assert(1 == 0); // Cannot happen...
-      return -1;
+      return 0;
 #else
       return std::distance(index.begin(), std::upper_bound(index.begin(), index.end(), node)) - 1;
 #endif
     }
+
+    static char **get_name_array(size_t count, int size);
+    static void delete_name_array(char **names, int count);
 
     // Fill time_string and date_string with current time and date
     // formatted as "HH:MM:SS" for time and "yy/mm/dd" or "yyyy/mm/dd"
@@ -171,16 +186,20 @@ namespace Ioss {
     // was created.
     static std::string platform_information();
 
-    // The following functions are wrappers around the sierra::Env functions
-    // or similar substitutes to reduce coupling of the Sierra framewk to
-    // the rest of the IO Subsystem. When compiled without the Framework code,
-    // Only these functions need to be reimplemented.
+    // Return amount of memory being used on this processor
+    static size_t get_memory_info();
+    static size_t get_hwm_memory_info();
+
     static void abort();
 
     // Return a filename relative to the specified working directory (if any)
     // of the current execution. Working_directory must end with '/' or be empty.
     static std::string local_filename(const std::string &relative_filename, const std::string &type,
                                       const std::string &working_directory);
+
+    static void get_fields(int64_t entity_count, char **names, size_t num_names,
+                           Ioss::Field::RoleType fld_role, const char suffix_separator,
+                           int *local_truth, std::vector<Ioss::Field> &fields);
 
     static int field_warning(const Ioss::GroupingEntity *ge, const Ioss::Field &field,
                              const std::string &inout);
@@ -204,19 +223,15 @@ namespace Ioss {
 
     static unsigned int hash(const std::string &name);
 
+    static double timer();
+
     // Return a vector of strings containing the lines of the input file.
     // Should only be called by a single processor or each processor will
     // be accessing the file at the same time...
-    //
     static void input_file(const std::string &file_name, std::vector<std::string> *lines,
                            size_t max_line_length = 0);
 
-    template <class T> static std::string to_string(const T &t)
-    {
-      std::ostringstream os;
-      os << t;
-      return os.str();
-    }
+    template <class T> static std::string to_string(const T &t) { return std::to_string(t); }
 
     // Many databases have a maximum length for variable names which can
     // cause a problem with variable name length.
@@ -240,6 +255,11 @@ namespace Ioss {
     // even though a history file is just a collection of global variables with no
     // real mesh. This routine will add the mesh portion to a history file.
     static void generate_history_mesh(Ioss::Region *region);
+
+    // Copy the mesh in 'region' to 'output_region'.  Behavior can be controlled
+    // via options in 'options'
+    static void copy_database(Ioss::Region &region, Ioss::Region &output_region,
+                              Ioss::MeshCopyOptions &options);
   };
-}
+} // namespace Ioss
 #endif

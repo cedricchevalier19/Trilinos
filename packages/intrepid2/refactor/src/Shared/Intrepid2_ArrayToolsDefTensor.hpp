@@ -70,7 +70,7 @@ namespace Intrepid2 {
 
       KOKKOS_INLINE_FUNCTION
       void operator()(const size_type iter) const {
-        size_type cell, field, point;
+        size_type cell, field(0), point;
         size_type rightRank = _rightInput.rank();
 
         if (_hasField) 
@@ -393,7 +393,7 @@ namespace Intrepid2 {
 
       KOKKOS_INLINE_FUNCTION
       void operator()(const size_type iter) const {
-        size_type cell, field, point;
+        size_type cell, field(0), point;
         size_type rightRank = _rightInput.rank();
 
         if (_hasField) 
@@ -1129,7 +1129,7 @@ namespace Intrepid2 {
 
       KOKKOS_INLINE_FUNCTION
       void operator()(const size_type iter) const {
-        size_type cell, field, point;
+        size_type cell(0), field(0), point(0);
         size_type leftRank = _leftInput.rank();
         size_type rightRank = _rightInput.rank();
         

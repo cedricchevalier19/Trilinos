@@ -62,9 +62,9 @@ namespace Intrepid2 {
     KOKKOS_INLINE_FUNCTION
     void
     Basis_HCURL_HEX_In_FEM::Serial<opType>::
-    getValues( /**/  outputViewType output,
+    getValues(       outputViewType output,
                const inputViewType  input,
-               /**/  workViewType   work,
+                     workViewType   work,
                const vinvViewType   vinvLine,
                const vinvViewType   vinvBubble) {
       const ordinal_type cardLine = vinvLine.dimension(0);
@@ -320,7 +320,7 @@ namespace Intrepid2 {
              typename vinvValueType,        class ...vinvProperties>
     void
     Basis_HCURL_HEX_In_FEM::
-    getValues( /**/  Kokkos::DynRankView<outputValueValueType,outputValueProperties...> outputValues,
+    getValues(       Kokkos::DynRankView<outputValueValueType,outputValueProperties...> outputValues,
                const Kokkos::DynRankView<inputPointValueType, inputPointProperties...>  inputPoints,
                const Kokkos::DynRankView<vinvValueType,       vinvProperties...>        vinvLine,
                const Kokkos::DynRankView<vinvValueType,       vinvProperties...>        vinvBubble,
@@ -351,7 +351,7 @@ namespace Intrepid2 {
       default: {
         INTREPID2_TEST_FOR_EXCEPTION( true , std::invalid_argument,
                                       ">>> ERROR (Basis_HCURL_HEX_In_FEM): Operator type not implemented" );
-        break;
+        // break;commented out since exception is thrown
       }
       }
     }
@@ -600,8 +600,8 @@ namespace Intrepid2 {
         for (ordinal_type j=0;j<cardLine;++j) { // y
           for (ordinal_type i=0;i<cardLine;++i,++idx) { // x
             dofCoordsHost(idx,0) = dofCoordsLineHost(i,0);
-            dofCoordsHost(idx,2) = dofCoordsLineHost(j,0);
-            dofCoordsHost(idx,1) = dofCoordsBubbleHost(k,0);
+            dofCoordsHost(idx,1) = dofCoordsLineHost(j,0);
+            dofCoordsHost(idx,2) = dofCoordsBubbleHost(k,0);
           }
         }
       }

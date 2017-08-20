@@ -1,13 +1,13 @@
 /*
 //@HEADER
 // ************************************************************************
-// 
+//
 //                        Kokkos v. 2.0
 //              Copyright (2014) Sandia Corporation
-// 
+//
 // Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
 // the U.S. Government retains certain rights in this software.
-// 
+//
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -36,15 +36,15 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Questions? Contact  H. Carter Edwards (hcedwar@sandia.gov)
-// 
+//
 // ************************************************************************
 //@HEADER
 */
 
-#ifndef KOKKOS_SHARED_ALLOC_HPP_
-#define KOKKOS_SHARED_ALLOC_HPP_
+#ifndef KOKKOS_SHARED_ALLOC_HPP
+#define KOKKOS_SHARED_ALLOC_HPP
 
-#include <stdint.h>
+#include <cstdint>
 #include <string>
 
 namespace Kokkos {
@@ -112,12 +112,12 @@ public:
 
   static int tracking_enabled() { return s_tracking_enabled ; }
 
-  /**\brief A host process thread claims and disables the 
+  /**\brief A host process thread claims and disables the
    *        shared allocation tracking flag.
    */
   static void tracking_claim_and_disable();
 
-  /**\brief A host process thread releases and enables the 
+  /**\brief A host process thread releases and enables the
    *        shared allocation tracking flag.
    */
   static void tracking_release_and_enable();
@@ -225,7 +225,7 @@ public:
   // inserts the record into the tracking list.  Decrementing the count from one to zero
   // removes from the trakcing list and deallocates.
   KOKKOS_INLINE_FUNCTION static
-  SharedAllocationRecord * allocate( const MemorySpace & arg_space 
+  SharedAllocationRecord * allocate( const MemorySpace & arg_space
                                    , const std::string & arg_label
                                    , const size_t        arg_alloc
                                    )
@@ -260,22 +260,22 @@ public:
 
 #if defined( KOKKOS_ACTIVE_EXECUTION_MEMORY_SPACE_HOST )
 
-#define KOKKOS_SHARED_ALLOCATION_TRACKER_ENABLED	\
+#define KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_ENABLED	\
   Record::tracking_enabled()
 
-#define KOKKOS_SHARED_ALLOCATION_TRACKER_INCREMENT	\
+#define KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_INCREMENT	\
   if ( ! ( m_record_bits & DO_NOT_DEREF_FLAG ) ) Record::increment( m_record );
 
-#define KOKKOS_SHARED_ALLOCATION_TRACKER_DECREMENT	\
+#define KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_DECREMENT	\
   if ( ! ( m_record_bits & DO_NOT_DEREF_FLAG ) ) Record::decrement( m_record );
 
 #else
 
-#define KOKKOS_SHARED_ALLOCATION_TRACKER_ENABLED  0
+#define KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_ENABLED  0
 
-#define KOKKOS_SHARED_ALLOCATION_TRACKER_INCREMENT /* */
+#define KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_INCREMENT /* */
 
-#define KOKKOS_SHARED_ALLOCATION_TRACKER_DECREMENT /* */
+#define KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_DECREMENT /* */
 
 #endif
 
@@ -319,7 +319,7 @@ public:
 
   KOKKOS_FORCEINLINE_FUNCTION
   ~SharedAllocationTracker()
-    { KOKKOS_SHARED_ALLOCATION_TRACKER_DECREMENT }
+    { KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_DECREMENT }
 
   KOKKOS_FORCEINLINE_FUNCTION
   constexpr SharedAllocationTracker()
@@ -336,7 +336,7 @@ public:
   SharedAllocationTracker & operator = ( SharedAllocationTracker && rhs )
     {
       // If this is tracking then must decrement
-      KOKKOS_SHARED_ALLOCATION_TRACKER_DECREMENT
+      KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_DECREMENT
       // Move and reset RHS to default constructed value.
       m_record_bits = rhs.m_record_bits ;
       rhs.m_record_bits = DO_NOT_DEREF_FLAG ;
@@ -347,32 +347,32 @@ public:
 
   KOKKOS_FORCEINLINE_FUNCTION
   SharedAllocationTracker( const SharedAllocationTracker & rhs )
-    : m_record_bits( KOKKOS_SHARED_ALLOCATION_TRACKER_ENABLED
+    : m_record_bits( KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_ENABLED
                    ? rhs.m_record_bits
                    : rhs.m_record_bits | DO_NOT_DEREF_FLAG )
     {
-      KOKKOS_SHARED_ALLOCATION_TRACKER_INCREMENT
+      KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_INCREMENT
     }
 
   /** \brief  Copy construction may disable tracking. */
   KOKKOS_FORCEINLINE_FUNCTION
   SharedAllocationTracker( const SharedAllocationTracker & rhs
                          , const bool enable_tracking )
-    : m_record_bits( KOKKOS_SHARED_ALLOCATION_TRACKER_ENABLED
+    : m_record_bits( KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_ENABLED
                      && enable_tracking
                    ? rhs.m_record_bits
                    : rhs.m_record_bits | DO_NOT_DEREF_FLAG )
-    { KOKKOS_SHARED_ALLOCATION_TRACKER_INCREMENT }
+    { KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_INCREMENT }
 
   KOKKOS_FORCEINLINE_FUNCTION
   SharedAllocationTracker & operator = ( const SharedAllocationTracker & rhs )
     {
       // If this is tracking then must decrement
-      KOKKOS_SHARED_ALLOCATION_TRACKER_DECREMENT
-      m_record_bits = KOKKOS_SHARED_ALLOCATION_TRACKER_ENABLED
+      KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_DECREMENT
+      m_record_bits = KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_ENABLED
                     ? rhs.m_record_bits
                     : rhs.m_record_bits | DO_NOT_DEREF_FLAG ;
-      KOKKOS_SHARED_ALLOCATION_TRACKER_INCREMENT
+      KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_INCREMENT
       return *this ;
     }
 
@@ -381,17 +381,17 @@ public:
   void assign( const SharedAllocationTracker & rhs
              , const bool enable_tracking )
     {
-      KOKKOS_SHARED_ALLOCATION_TRACKER_DECREMENT
-      m_record_bits = KOKKOS_SHARED_ALLOCATION_TRACKER_ENABLED
+      KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_DECREMENT
+      m_record_bits = KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_ENABLED
                       && enable_tracking
                     ? rhs.m_record_bits
                     : rhs.m_record_bits | DO_NOT_DEREF_FLAG ;
-      KOKKOS_SHARED_ALLOCATION_TRACKER_INCREMENT
+      KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_INCREMENT
     }
 
-#undef KOKKOS_SHARED_ALLOCATION_TRACKER_ENABLED
-#undef KOKKOS_SHARED_ALLOCATION_TRACKER_INCREMENT
-#undef KOKKOS_SHARED_ALLOCATION_TRACKER_DECREMENT
+#undef KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_ENABLED
+#undef KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_INCREMENT
+#undef KOKKOS_IMPL_SHARED_ALLOCATION_TRACKER_DECREMENT
 
 };
 
@@ -400,3 +400,4 @@ public:
 } /* namespace Kokkos */
 
 #endif
+

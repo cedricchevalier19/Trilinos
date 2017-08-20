@@ -55,7 +55,54 @@
 namespace ROL {
 
 template<class Real> 
-class StdInequalityConstraint : public virtual StdEqualityConstraint<Real> {};
+class StdInequalityConstraint : public StdEqualityConstraint<Real>, 
+                                public InequalityConstraint<Real>  {
+
+  typedef StdEqualityConstraint<Real>  StdEC;
+  typedef Vector<Real>                 V;  
+
+public:
+
+  using EqualityConstraint<Real>::update;
+  void update( const Vector<Real> &x, bool flag = true, int iter = -1 ) {
+    StdEC::update(x,flag,iter);
+  }
+
+  using EqualityConstraint<Real>::value;
+  void value(V &c, const V &x, Real &tol ) {
+    StdEC::value(c,x,tol);
+  }
+
+  using EqualityConstraint<Real>::applyJacobian;
+  void applyJacobian(V &jv, const V &v, const V &x, Real &tol) {
+    StdEC::applyJacobian(jv, v, x, tol);
+  }
+
+  using EqualityConstraint<Real>::applyAdjointJacobian;
+  void applyAdjointJacobian(V &aju, const V &u, const V &x, Real &tol) {
+    StdEC::applyAdjointJacobian(aju, u, x, tol);
+  }
+
+  using EqualityConstraint<Real>::applyAdjointHessian;
+  void applyAdjointHessian(V &ahuv, const V &u, const V &v, const V &x, Real &tol) {
+    StdEC::applyAdjointHessian(ahuv, u, v, x, tol);  
+
+  }
+
+  using EqualityConstraint<Real>::solveAugmentedSystem;
+  std::vector<Real> solveAugmentedSystem(Vector<Real> &v1, Vector<Real> &v2,
+                                         const Vector<Real> &b1, const Vector<Real> &b2,
+                                         const Vector<Real> &x, Real &tol) {
+    return StdEC::solveAugmentedSystem(v1,v2,b1,b2,x,tol);
+  }
+
+  using EqualityConstraint<Real>::applyPreconditioner;
+  void applyPreconditioner(Vector<Real> &pv, const Vector<Real> &v, const Vector<Real> &x,
+                           const Vector<Real> &g, Real &tol) {
+    StdEC::applyPreconditioner(pv,v,x,g,tol);
+  }
+
+}; // class StdInequalityConstraint
 
 } // namespace ROL
 

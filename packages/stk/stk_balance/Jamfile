@@ -37,12 +37,19 @@
 import set ;
 import path ;
 
+local stk_balance-root-inc ;
+if $(RTenv-arg) = "user" {
+  stk_balance-root-inc = $(stk_balance-root)/include ;
+} else {
+  stk_balance-root-inc = $(stk_balance-root) ;
+}
+
 project votd
   : requirements
     $(sierra-warnings)
-    <include>$(stk_balance-root)
+    <include>$(stk_balance-root-inc)
   : usage-requirements
-    <include>$(stk_balance-root)
+    <include>$(stk_balance-root-inc)
   : build-dir $(stk_balance-builddir)
   ;
 
@@ -58,6 +65,7 @@ explicit install-targets ;
 alias install-targets
   : stk_balance_unit_tester
     stk_balance_integration_tester
+    stk_balance_m2n
     stk_balance
   ;
 
@@ -65,8 +73,11 @@ alias install-targets
 # SECTION 3: End-user install
 #
 explicit install-user-env ;
-alias install-user-env : install-user-jamfile
-                          install-user-include install-user-lib ;
+alias install-user-env : install-user-jamfile 
+                         install-user-bin
+                         install-user-include 
+                         install-user-lib 
+                       ;
 
 # This rule copies build-system related files for this product to the install-root.
 explicit install-user-jamfile ;
@@ -80,6 +91,15 @@ install install-user-jamfile
 explicit install-exe-targets ;
 alias install-exe-targets : ;
 
+# Note that all Sierra executable are installed in a common bin directory,
+# not in a product-specific bin directory.
+explicit install-user-bin ;
+install install-user-bin
+  : stk_balance
+    stk_balance_m2n
+  : <location>$(install-bin-dir)
+  ;
+
 explicit install-user-include ;
 install install-user-include
   : [ path.glob-tree $(stk_balance-root)/stk_balance : *.h *.hpp *.H ]
@@ -92,11 +112,26 @@ install install-user-lib
   : <location>$(install-root)/stk/stk_balance/lib
   ;
 
+lib search_tolerance
+  :
+    [ ifdevbuild 
+      [ glob $(stk_balance-root)/stk_balance/search_tolerance/*.cpp 
+      ] 
+    ]
+    /sierra/stk_balance//stk_balance_lib
+    /sierra/stk_mesh//stk_mesh_base
+  :
+    <include>$(stk_balance-root)/stk_balance/search_tolerance/
+    [ ifuserbuild <file>$(stk_balance-root)/lib/libstk_balance_search_tolerance.a ]
+  :
+  :
+  ;
 
 lib stk_balance_lib
   :
     [ ifdevbuild 
-      [ glob $(stk_balance-root)/stk_balance/balance.cpp 
+      [ glob 
+             $(stk_balance-root)/stk_balance/*.cpp 
              $(stk_balance-root)/stk_balance/internal/*.cpp 
       ] 
     ]
@@ -104,14 +139,15 @@ lib stk_balance_lib
     /sierra/stk_mesh//stk_mesh_base
     /tpl/trilinos//teuchos
     /tpl/trilinos//zoltan2
+    /sierra/stk_transfer//stk_transfer_impl
     /sierra/stk_search//stk_search
+    /sierra/stk_tools//stk_tools_lib
     /mpi//mpi
   :
     <include>$(stk_balance-root)/stk_balance
     [ ifuserbuild <file>$(stk_balance-root)/lib/libstk_balance_lib.a ]
   :
   :
-    <include>$(stk_balance-root)/stk_balance
   ;
 
 lib stk_balance_test_utils
@@ -136,6 +172,7 @@ exe stk_balance_unit_tester
       $(stk_balance-root)/unit_tests/*.cpp
       $(stk_balance-root)/doc_tests/*.cpp
     ]
+    /sierra/stk_unit_test_utils//stk_unit_main
     stk_balance_test_utils
     stk_balance_lib
     /sierra/seacas//ioss
@@ -144,8 +181,8 @@ exe stk_balance_unit_tester
     /tpl/gtest//gtest
     /mpi//mpi
     /sierra/stk_util//stk_util_parallel
+    /sierra/stk_util//stk_util_command_line
   :
-    <include>$(stk_balance-root)/stk_balance
     <tag>@sierra-exec-tag
   ;
 
@@ -154,9 +191,11 @@ exe stk_balance_integration_tester
     [ glob
       $(stk_balance-root)/integration_tests/*.cpp
     ]
+    /sierra/stk_unit_test_utils//stk_unit_main
     stk_balance_test_utils
     stk_balance_lib
     /sierra/stk_unit_test_utils//stk_unit_test_utils
+    /sierra/stk_balance//search_tolerance
     /sierra/seacas//ioss
     /tpl/gtest//gtest
     /mpi//mpi
@@ -167,14 +206,24 @@ exe stk_balance_integration_tester
 exe stk_balance
   :
     [ glob 
-        $(stk_balance-root)/stk_balance/main.c*
+        $(stk_balance-root)/stk_balance/balance_main/*.cpp
     ]
     stk_balance_lib
-    /sierra/stk_unit_test_utils//stk_unit_test_utils
+    /sierra/stk_util//stk_util_command_line
     /mpi//mpi
   :
-    <include>$(stk_balance-root)/stk_balance
     <tag>@sierra-exec-tag
   ;
 
+exe stk_balance_m2n
+  :
+    [ glob 
+        $(stk_balance-root)/stk_balance/m2n_main/*.cpp
+    ]
+    stk_balance_lib
+    /sierra/stk_util//stk_util_command_line
+    /mpi//mpi
+  :
+    <tag>@sierra-exec-tag
+  ;
 

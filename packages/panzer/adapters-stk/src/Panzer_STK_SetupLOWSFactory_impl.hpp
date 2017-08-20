@@ -68,6 +68,8 @@
 #include <Thyra_MueLuPreconditionerFactory.hpp>
 #include "Stratimikos_MueLuHelpers.hpp"
 #include "MatrixMarket_Tpetra.hpp"
+#include "Xpetra_MapFactory.hpp"
+#include "Xpetra_MultiVectorFactory.hpp"
 #endif
 
 #ifdef PANZER_HAVE_IFPACK2
@@ -78,7 +80,7 @@ namespace panzer_stk {
 
 namespace {
 
-  bool 
+  bool
   determineCoordinateField(const panzer::UniqueGlobalIndexerBase & globalIndexer,std::string & fieldName)
   {
     std::vector<std::string> elementBlocks;
@@ -109,28 +111,8 @@ namespace {
     return true;
   }
 
-#ifdef PANZER_HAVE_FEI
   template<typename GO>
-  void 
-  fillFieldPatternMap(const panzer::DOFManagerFEI<int,GO> & globalIndexer,
-                      const std::string & fieldName,
-                      std::map<std::string,Teuchos::RCP<const panzer::Intrepid2FieldPattern> > & fieldPatterns)
-  {
-     std::vector<std::string> elementBlocks;
-     globalIndexer.getElementBlockIds(elementBlocks);
-
-     for(std::size_t e=0;e<elementBlocks.size();e++) {
-        std::string blockId = elementBlocks[e];
-
-        if(globalIndexer.fieldInBlock(fieldName,blockId))
-           fieldPatterns[blockId] =
-              Teuchos::rcp_dynamic_cast<const panzer::Intrepid2FieldPattern>(globalIndexer.getFieldPattern(blockId,fieldName),true);
-     }
-  }
-#endif
-
-  template<typename GO>
-  void 
+  void
   fillFieldPatternMap(const panzer::DOFManager<int,GO> & globalIndexer,
                       const std::string & fieldName,
                       std::map<std::string,Teuchos::RCP<const panzer::Intrepid2FieldPattern> > & fieldPatterns)
@@ -190,7 +172,8 @@ namespace {
                    #endif
                    bool writeCoordinates,
                    bool writeTopo,
-                   const Teuchos::RCP<const panzer::UniqueGlobalIndexerBase> & auxGlobalIndexer
+                   const Teuchos::RCP<const panzer::UniqueGlobalIndexerBase> & auxGlobalIndexer,
+                   bool useCoordinates
                    )
   {
     using Teuchos::RCP;
@@ -245,6 +228,8 @@ namespace {
 
           // determine if you want rigid body null space modes...currently an extremely specialized case!
           if(strat_params->sublist("Preconditioner Types").isSublist("ML")) {
+/*           COMMENTING THIS OUT FOR NOW, this is causing problems with some of the preconditioners in optimization...not sure why
+
              Teuchos::ParameterList & ml_params = strat_params->sublist("Preconditioner Types").sublist("ML").sublist("ML Settings");
 
              {
@@ -260,6 +245,7 @@ namespace {
                 ml_params.set<double*>("y-coordinates",&ycoords[0]);
                 ml_params.set<double*>("z-coordinates",&zcoords[0]);
              }
+*/
 /*
              bool useRigidBodyNullSpace = false;
              if(ml_params.isType<std::string>("null space: type"))
@@ -276,7 +262,7 @@ namespace {
                 std::vector<double> & xcoords = const_cast<std::vector<double> & >(callback->getXCoordsVector());
                 std::vector<double> & ycoords = const_cast<std::vector<double> & >(callback->getYCoordsVector());
                 std::vector<double> & zcoords = const_cast<std::vector<double> & >(callback->getZCoordsVector());
- 
+
                 // use ML to build the null space modes for ML
                 int Nnodes     = Teuchos::as<int>(xcoords.size());
                 int NscalarDof = 0;
@@ -284,7 +270,7 @@ namespace {
                 int nRBM       = spatialDim==3 ? 6 : (spatialDim==2 ? 3 : 1);
                 int rbmSize    = Nnodes*(nRBM+NscalarDof)*(Ndof+NscalarDof);
                 rbm_ref.resize(rbmSize);
- 
+
                 ML_Coord2RBM(Nnodes,&xcoords[0],&ycoords[0],&zcoords[0],&rbm_ref[0],Ndof,NscalarDof);
 
                 ml_params.set<double*>("null space: vectors",&rbm_ref[0]);
@@ -327,7 +313,8 @@ namespace {
           }
 
           #ifdef PANZER_HAVE_MUELU
-          if(rcp_dynamic_cast<const panzer::UniqueGlobalIndexer<int,panzer::Ordinal64> >(globalIndexer)!=Teuchos::null) {
+          if(rcp_dynamic_cast<const panzer::UniqueGlobalIndexer<int,panzer::Ordinal64> >(globalIndexer)!=Teuchos::null
+             && useCoordinates) {
              if(!writeCoordinates)
                 callback->preRequest(Teko::RequestMesg(rcp(new Teuchos::ParameterList())));
 
@@ -437,7 +424,49 @@ namespace {
             default:
                TEUCHOS_ASSERT(false);
             }
-          }
+
+            // TODO add MueLu code...
+            #ifdef PANZER_HAVE_MUELU
+            if(useCoordinates) {
+
+              typedef Xpetra::Map<int,GO> Map;
+              typedef Xpetra::MultiVector<double,int,GO> MV;
+
+              // TODO This is Epetra-specific
+              RCP<const Map> coords_map = Xpetra::MapFactory<int,GO>::Build(Xpetra::UseEpetra,
+                  Teuchos::OrdinalTraits<GO>::invalid(),
+                  //Teuchos::ArrayView<GO>(ownedIndices),
+                  xcoords.size(),
+                  0,
+                  mpi_comm
+              );
+
+              unsigned dim = Teuchos::as<unsigned>(spatialDim);
+
+              RCP<MV> coords = Xpetra::MultiVectorFactory<double,int,GO>::Build(coords_map,spatialDim);
+
+              for(unsigned d=0;d<dim;d++) {
+                // sanity check the size
+                TEUCHOS_ASSERT(coords->getLocalLength()==xcoords.size());
+
+                // fill appropriate coords vector
+                Teuchos::ArrayRCP<double> dest = coords->getDataNonConst(d);
+                for(std::size_t i=0;i<coords->getLocalLength();i++) {
+                  if (d == 0) dest[i] = xcoords[i];
+                  if (d == 1) dest[i] = ycoords[i];
+                  if (d == 2) dest[i] = zcoords[i];
+                }
+              }
+
+              // TODO This is Epetra-specific
+              // inject coordinates into parameter list
+              Teuchos::ParameterList & muelu_params = strat_params->sublist("Preconditioner Types").sublist("MueLu");
+              muelu_params.set<RCP<MV> >("Coordinates",coords);
+
+            }
+            #endif
+
+          } /* end loop over all physical fields */
        }
 
        if(writeTopo) {
@@ -459,80 +488,6 @@ namespace {
 
     return lowsFactory;
   }
-
-/*
- * This FEI stuff is no longer needed, but I'm keeping it around in case this code needs to be
- * recreated for the current DOFManager
- *
-  template<typename GO>
-  void 
-  writeTopology(const panzer::BlockedDOFManager<int,GO> & blkDofs)
-  {
-    using Teuchos::RCP;
-
-    // loop over each field block
-    const std::vector<RCP<panzer::UniqueGlobalIndexer<int,GO> > > & blk_dofMngrs = blkDofs.getFieldDOFManagers();
-    for(std::size_t b=0;b<blk_dofMngrs.size();b++) {
-#ifdef PANZER_HAVE_FEI
-      RCP<panzer::DOFManagerFEI<int,GO> > dofMngr = Teuchos::rcp_dynamic_cast<panzer::DOFManagerFEI<int,GO> >(blk_dofMngrs[b],true);
-
-      std::vector<std::string> eBlocks;
-      dofMngr->getElementBlockIds(eBlocks);
-
-      // build file name
-      std::stringstream fileName;
-      fileName << "elements_" << b;
-      std::ofstream file(fileName.str().c_str());
-
-      // loop over each element block, write out topology
-      for(std::size_t e=0;e<eBlocks.size();e++)
-        writeTopology(*dofMngr,eBlocks[e],file);
-#else
-      TEUCHOS_ASSERT(false);
-#endif
-    }
-  }
-#ifdef PANZER_HAVE_FEI
-  template <typename GO>
-  void 
-  writeTopology(const panzer::DOFManagerFEI<int,GO> & dofs,const std::string & block,std::ostream & os)
-  {
-    std::vector<std::string> fields(dofs.getElementBlockGIDCount(block));
-
-    const std::set<int> & fieldIds = dofs.getFields(block);
-    for(std::set<int>::const_iterator itr=fieldIds.begin();itr!=fieldIds.end();++itr) {
-      std::string field = dofs.getFieldString(*itr);
-
-      // get the layout of each field
-      const std::vector<int> & fieldOffsets = dofs.getGIDFieldOffsets(block,*itr);
-      for(std::size_t f=0;f<fieldOffsets.size();f++)
-        fields[fieldOffsets[f]] = field;
-
-    }
-
-    // print the layout of the full pattern
-    os << "#" << std::endl;
-    os << "# Element Block \"" << block << "\"" << std::endl;
-    os << "#   field pattern = [ " << fields[0];
-    for(std::size_t f=1;f<fields.size();f++)
-      os << ", " << fields[f];
-    os << " ]" << std::endl;
-    os << "#" << std::endl;
-
-    const std::vector<int> & elements = dofs.getElementBlock(block);
-    for(std::size_t e=0;e<elements.size();e++) {
-      std::vector<GO> gids;
-      dofs.getElementGIDs(elements[e],gids,block);
-
-      // output gids belonging to this element
-      os << "[ " << gids[0];
-      for(std::size_t g=1;g<gids.size();g++)
-        os << ", " << gids[g];
-      os << " ]" << std::endl;
-    }
-  }
-#endif
-*/
 
 }
 

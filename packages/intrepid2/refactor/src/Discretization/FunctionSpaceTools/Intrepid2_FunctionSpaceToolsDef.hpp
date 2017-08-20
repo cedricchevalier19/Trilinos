@@ -57,7 +57,7 @@ namespace Intrepid2 {
            typename inputValueType,  class ...inputProperties>
   void
   FunctionSpaceTools<SpT>::
-  HGRADtransformVALUE( /**/  Kokkos::DynRankView<outputValueType,outputProperties...> output,
+  HGRADtransformVALUE(       Kokkos::DynRankView<outputValueType,outputProperties...> output,
                        const Kokkos::DynRankView<inputValueType, inputProperties...>  input ) {
     ArrayTools<SpT>::cloneFields(output, input);
   }
@@ -70,7 +70,7 @@ namespace Intrepid2 {
               typename inputViewType,
               ordinal_type spaceDim>
     struct F_HGRADtransformGRAD {
-      /**/  outputViewType     _output;
+            outputViewType     _output;
       const jacInverseViewType  _jacInverse;
       const inputViewType _input;
 
@@ -87,23 +87,14 @@ namespace Intrepid2 {
       void operator()(const ordinal_type cl,
                       const ordinal_type bf,
                       const ordinal_type pt) const {
-        // /**/  auto y = Kokkos::subview(_output,     cl, bf, pt, Kokkos::ALL());
-        // const auto A = Kokkos::subview(_jacInverse, cl,     pt, Kokkos::ALL(), Kokkos::ALL());
-        // const auto x = Kokkos::subview(_input,      bf,     pt, Kokkos::ALL());
-        
-        // restructuring 
-        const ordinal_type cfp[3] = { cl, bf, pt };
-        const ordinal_type c_p[2] = { cl,     pt };
-        const ordinal_type _bp[2] = {     bf, pt };
-
-        ViewAdapter<3,outputViewType>     y(cfp, _output); 
-        ViewAdapter<2,jacInverseViewType> A(c_p, _jacInverse);
-        ViewAdapter<2,inputViewType>      x(_bp, _input);
+        /* */ auto y = Kokkos::subview(_output,     cl, bf, pt, Kokkos::ALL());
+        const auto A = Kokkos::subview(_jacInverse, cl,     pt, Kokkos::ALL(), Kokkos::ALL());
+        const auto x = Kokkos::subview(_input,      bf,     pt, Kokkos::ALL());
         
         if (spaceDim == 2) {
-          Kernels::matvec_trans_product_d2( y, A, x );
+          Kernels::Serial::matvec_trans_product_d2( y, A, x );
         } else {
-          Kernels::matvec_trans_product_d3( y, A, x );
+          Kernels::Serial::matvec_trans_product_d3( y, A, x );
         }
       }
     };
@@ -115,7 +106,7 @@ namespace Intrepid2 {
            typename inputValValueType,        class ...inputValProperties>
   void
   FunctionSpaceTools<SpT>::
-  HGRADtransformGRAD( /**/  Kokkos::DynRankView<outputValValueType,      outputValProperties...>       outputVals,
+  HGRADtransformGRAD(       Kokkos::DynRankView<outputValValueType,      outputValProperties...>       outputVals,
                       const Kokkos::DynRankView<jacobianInverseValueType,jacobianInverseProperties...> jacobianInverse,
                       const Kokkos::DynRankView<inputValValueType,       inputValProperties...>        inputVals ) {
 #ifdef HAVE_INTREPID2_DEBUG
@@ -143,7 +134,7 @@ namespace Intrepid2 {
     // this modification is for 2d and 3d (not 1d)
     // this is an attempt to measure the overhead of subview of dynrankview. 
 
-    // typedef /**/  Kokkos::DynRankView<outputValValueType,outputValProperties...> outputViewType;
+    // typedef       Kokkos::DynRankView<outputValValueType,outputValProperties...> outputViewType;
     // typedef const Kokkos::DynRankView<jacobianInverseValueType,jacobianInverseProperties...> jacInverseViewType;
     // typedef const Kokkos::DynRankView<inputValValueType,inputValProperties...>  inputViewType;
 
@@ -185,7 +176,7 @@ namespace Intrepid2 {
            typename inputValValueType,        class ...inputValProperties>
   void
   FunctionSpaceTools<SpT>::
-  HCURLtransformVALUE( /**/  Kokkos::DynRankView<outputValValueType,      outputValProperties...>       outputVals,
+  HCURLtransformVALUE(       Kokkos::DynRankView<outputValValueType,      outputValProperties...>       outputVals,
                        const Kokkos::DynRankView<jacobianInverseValueType,jacobianInverseProperties...> jacobianInverse,
                        const Kokkos::DynRankView<inputValValueType,       inputValProperties...>        inputVals ) {
     ArrayTools<SpT>::matvecProductDataField(outputVals, jacobianInverse, inputVals, 'T');
@@ -200,7 +191,7 @@ namespace Intrepid2 {
            typename inputValValueType,    class ...inputValProperties>
   void
   FunctionSpaceTools<SpT>::
-  HCURLtransformCURL( /**/  Kokkos::DynRankView<outputValValueType,  outputValProperties...>   outputVals,
+  HCURLtransformCURL(       Kokkos::DynRankView<outputValValueType,  outputValProperties...>   outputVals,
                       const Kokkos::DynRankView<jacobianValueType,   jacobianProperties...>    jacobian,
                       const Kokkos::DynRankView<jacobianDetValueType,jacobianDetProperties...> jacobianDet,
                       const Kokkos::DynRankView<inputValValueType,   inputValProperties...>    inputVals ) {
@@ -217,7 +208,7 @@ namespace Intrepid2 {
            typename inputValValueType,    class ...inputValProperties>
   void
   FunctionSpaceTools<SpT>::
-  HDIVtransformVALUE( /**/  Kokkos::DynRankView<outputValValueType,  outputValProperties...>   outputVals,
+  HDIVtransformVALUE(       Kokkos::DynRankView<outputValValueType,  outputValProperties...>   outputVals,
                       const Kokkos::DynRankView<jacobianValueType,   jacobianProperties...>    jacobian,
                       const Kokkos::DynRankView<jacobianDetValueType,jacobianDetProperties...> jacobianDet,
                       const Kokkos::DynRankView<inputValValueType,   inputValProperties...>    inputVals ) {
@@ -233,7 +224,7 @@ namespace Intrepid2 {
            typename inputValValueType,    class ...inputValProperties>
   void
   FunctionSpaceTools<SpT>::
-  HDIVtransformDIV( /**/  Kokkos::DynRankView<outputValValueType,  outputValProperties...>   outputVals,
+  HDIVtransformDIV(       Kokkos::DynRankView<outputValValueType,  outputValProperties...>   outputVals,
                     const Kokkos::DynRankView<jacobianDetValueType,jacobianDetProperties...> jacobianDet,
                     const Kokkos::DynRankView<inputValValueType,   inputValProperties...>    inputVals ) {
     ArrayTools<SpT>::scalarMultiplyDataField(outputVals, jacobianDet, inputVals, true);
@@ -247,7 +238,7 @@ namespace Intrepid2 {
            typename inputValValueType,    class ...inputValProperties>
   void
   FunctionSpaceTools<SpT>::
-  HVOLtransformVALUE( /**/  Kokkos::DynRankView<outputValValueType,  outputValProperties...>   outputVals,
+  HVOLtransformVALUE(       Kokkos::DynRankView<outputValValueType,  outputValProperties...>   outputVals,
                       const Kokkos::DynRankView<jacobianDetValueType,jacobianDetProperties...> jacobianDet,
                       const Kokkos::DynRankView<inputValValueType,   inputValProperties...>    inputVals ) {
     ArrayTools<SpT>::scalarMultiplyDataField(outputVals, jacobianDet, inputVals, true);
@@ -261,7 +252,7 @@ namespace Intrepid2 {
            typename rightValueValueType,  class ...rightValueProperties>
   void
   FunctionSpaceTools<SpT>::
-  integrate( /**/  Kokkos::DynRankView<outputValueValueType,outputValueProperties...> outputValues,
+  integrate(       Kokkos::DynRankView<outputValueValueType,outputValueProperties...> outputValues,
              const Kokkos::DynRankView<leftValueValueType,  leftValueProperties...>   leftValues,
              const Kokkos::DynRankView<rightValueValueType, rightValueProperties...>  rightValues,
              const bool sumInto ) {
@@ -282,7 +273,7 @@ namespace Intrepid2 {
     const ordinal_type mode = outRank*10 + leftRank;
 
     switch (mode) {
-      // *** DataData
+      // DataData
     case 12:
       ArrayTools<SpT>::contractDataDataScalar( outputValues,
                                                leftValues,
@@ -302,7 +293,7 @@ namespace Intrepid2 {
                                                sumInto );
       break;
 
-      // *** DataField
+      // DataField
     case 22:
       ArrayTools<SpT>::contractDataFieldScalar( outputValues,
                                                 leftValues,
@@ -322,7 +313,7 @@ namespace Intrepid2 {
                                                 sumInto );
       break;
 
-      // *** FieldField
+      // FieldField
     case 33:
       ArrayTools<SpT>::contractFieldFieldScalar( outputValues,
                                                  leftValues,
@@ -356,7 +347,7 @@ namespace Intrepid2 {
              typename inputDetViewType,
              typename inputWeightViewType>
     struct F_computeCellMeasure {
-      /**/  outputValViewType   _outputVals;
+            outputValViewType   _outputVals;
       const inputDetViewType    _inputDet;
       const inputWeightViewType    _inputWeight;
       
@@ -402,7 +393,7 @@ namespace Intrepid2 {
            typename inputWeightValueType, class ...inputWeightProperties>
   bool
   FunctionSpaceTools<SpT>::
-  computeCellMeasure( /**/  Kokkos::DynRankView<outputValValueType,  outputValProperties...>   outputVals,
+  computeCellMeasure(       Kokkos::DynRankView<outputValValueType,  outputValProperties...>   outputVals,
                       const Kokkos::DynRankView<inputDetValueType,   inputDetProperties...>    inputDet,
                       const Kokkos::DynRankView<inputWeightValueType,inputWeightProperties...> inputWeights ) {
 #ifdef HAVE_INTREPID2_DEBUG
@@ -422,7 +413,7 @@ namespace Intrepid2 {
     typedef          Kokkos::DynRankView<inputDetValueType,   inputDetProperties...>          inputDetViewType;
     typedef          Kokkos::DynRankView<inputWeightValueType,inputWeightProperties...>       inputWeightViewType;
     typedef          FunctorFunctionSpaceTools::F_computeCellMeasure
-      /**/           <outputValViewType,inputDetViewType,inputWeightViewType> FunctorType;
+                     <outputValViewType,inputDetViewType,inputWeightViewType> FunctorType;
     
     const ordinal_type C = inputDet.dimension(0);
     Kokkos::RangePolicy<SpT,Kokkos::Schedule<Kokkos::Static> > policy(0, C);
@@ -442,7 +433,7 @@ namespace Intrepid2 {
            typename scratchValueType,     class ...scratchProperties>
   void 
   FunctionSpaceTools<SpT>::
-  computeFaceMeasure( /**/  Kokkos::DynRankView<outputValValueType,  outputValProperties...>   outputVals,
+  computeFaceMeasure(       Kokkos::DynRankView<outputValValueType,  outputValProperties...>   outputVals,
                       const Kokkos::DynRankView<inputJacValueType,  inputJacProperties...>     inputJac,
                       const Kokkos::DynRankView<inputWeightValueType,inputWeightProperties...> inputWeights,
                       const ordinal_type                   whichFace,
@@ -488,7 +479,7 @@ namespace Intrepid2 {
            typename scratchValueType,     class ...scratchProperties>
   void 
   FunctionSpaceTools<SpT>::
-  computeEdgeMeasure( /**/  Kokkos::DynRankView<outputValValueType,  outputValProperties...>  outputVals,
+  computeEdgeMeasure(       Kokkos::DynRankView<outputValValueType,  outputValProperties...>  outputVals,
                       const Kokkos::DynRankView<inputJacValueType,  inputJacProperties...>   inputJac,
                       const Kokkos::DynRankView<inputWeightValueType,inputWeightProperties...> inputWeights,
                       const ordinal_type                   whichEdge,
@@ -533,7 +524,7 @@ namespace Intrepid2 {
            typename inputValValueType,     class ...inputValProperteis>
   void
   FunctionSpaceTools<SpT>::
-  multiplyMeasure( /**/  Kokkos::DynRankView<outputValValueType,   outputValProperties...>    outputVals,
+  multiplyMeasure(       Kokkos::DynRankView<outputValValueType,   outputValProperties...>    outputVals,
                    const Kokkos::DynRankView<inputMeasureValueType,inputMeasureProperties...> inputMeasure,
                    const Kokkos::DynRankView<inputValValueType,    inputValProperteis...>     inputVals ) {
     scalarMultiplyDataField( outputVals, 
@@ -549,7 +540,7 @@ namespace Intrepid2 {
            typename inputFieldValueType,  class ...inputFieldProperties>
   void
   FunctionSpaceTools<SpT>::
-  scalarMultiplyDataField( /**/  Kokkos::DynRankView<outputFieldValueType,outputFieldProperties...> outputFields,
+  scalarMultiplyDataField(       Kokkos::DynRankView<outputFieldValueType,outputFieldProperties...> outputFields,
                            const Kokkos::DynRankView<inputDataValueType,  inputDataProperties...>   inputData,
                            const Kokkos::DynRankView<inputFieldValueType, inputFieldProperties...>  inputFields,
                            const bool reciprocal ) {
@@ -567,7 +558,7 @@ namespace Intrepid2 {
            typename inputDataRightValueType, class ...inputDataRightProperties>
   void
   FunctionSpaceTools<SpT>::
-  scalarMultiplyDataData( /**/  Kokkos::DynRankView<outputDataValuetype,    outputDataProperties...>     outputData,
+  scalarMultiplyDataData(       Kokkos::DynRankView<outputDataValuetype,    outputDataProperties...>     outputData,
                           const Kokkos::DynRankView<inputDataLeftValueType, inputDataLeftProperties...>  inputDataLeft,
                           const Kokkos::DynRankView<inputDataRightValueType,inputDataRightProperties...> inputDataRight,
                           const bool reciprocal ) {
@@ -585,7 +576,7 @@ namespace Intrepid2 {
            typename inputFieldValueType,  class ...inputFieldProperties>
   void
   FunctionSpaceTools<SpT>::
-  dotMultiplyDataField( /**/  Kokkos::DynRankView<outputFieldValueType,outputFieldProperties...> outputFields,
+  dotMultiplyDataField(       Kokkos::DynRankView<outputFieldValueType,outputFieldProperties...> outputFields,
                         const Kokkos::DynRankView<inputDataValueType,  inputDataProperties...>   inputData,
                         const Kokkos::DynRankView<inputFieldValueType, inputFieldProperties...>  inputFields ) {
     ArrayTools<SpT>::dotMultiplyDataField( outputFields, 
@@ -601,7 +592,7 @@ namespace Intrepid2 {
            typename inputDataRightValueType, class ...inputDataRightProperties>
   void
   FunctionSpaceTools<SpT>::  
-  dotMultiplyDataData( /**/  Kokkos::DynRankView<outputDataValueType,    outputDataProperties...>     outputData,
+  dotMultiplyDataData(       Kokkos::DynRankView<outputDataValueType,    outputDataProperties...>     outputData,
                        const Kokkos::DynRankView<inputDataLeftValueType, inputDataLeftProperties...>  inputDataLeft,
                        const Kokkos::DynRankView<inputDataRightValueType,inputDataRightProperties...> inputDataRight ) {
     ArrayTools<SpT>::dotMultiplyDataData( outputData, 
@@ -617,7 +608,7 @@ namespace Intrepid2 {
            typename inputFieldValueType,  class ...inputFieldProperties>
   void
   FunctionSpaceTools<SpT>::  
-  vectorMultiplyDataField( /**/  Kokkos::DynRankView<outputFieldValueType,outputFieldProperties...> outputFields,
+  vectorMultiplyDataField(       Kokkos::DynRankView<outputFieldValueType,outputFieldProperties...> outputFields,
                            const Kokkos::DynRankView<inputDataValueType,  inputDataProperties...>   inputData,
                            const Kokkos::DynRankView<inputFieldValueType, inputFieldProperties...>  inputFields ) {
     const auto outRank = outputFields.rank();
@@ -648,7 +639,7 @@ namespace Intrepid2 {
            typename inputDataRightValueType, class ...inputDataRightProperties>
   void
   FunctionSpaceTools<SpT>::  
-  vectorMultiplyDataData( /**/  Kokkos::DynRankView<outputDataValueType,    outputDataProperties...>     outputData,
+  vectorMultiplyDataData(       Kokkos::DynRankView<outputDataValueType,    outputDataProperties...>     outputData,
                           const Kokkos::DynRankView<inputDataLeftValueType, inputDataLeftProperties...>  inputDataLeft,
                           const Kokkos::DynRankView<inputDataRightValueType,inputDataRightProperties...> inputDataRight ) {
     const auto outRank = outputData.rank();
@@ -679,7 +670,7 @@ namespace Intrepid2 {
            typename inputFieldValueType,  class ...inputFieldProperties>
   void
   FunctionSpaceTools<SpT>::  
-  tensorMultiplyDataField( /**/  Kokkos::DynRankView<outputFieldValueType,outputFieldProperties...> outputFields,
+  tensorMultiplyDataField(       Kokkos::DynRankView<outputFieldValueType,outputFieldProperties...> outputFields,
                            const Kokkos::DynRankView<inputDataValueType,  inputDataProperties...>   inputData,
                            const Kokkos::DynRankView<inputFieldValueType, inputFieldProperties...>  inputFields,
                            const char transpose ) {
@@ -713,7 +704,7 @@ namespace Intrepid2 {
            typename inputDataRightValueType, class ...inputDataRightProperties>
   void
   FunctionSpaceTools<SpT>::  
-  tensorMultiplyDataData( /**/  Kokkos::DynRankView<outputDataValueType,    outputDataProperties...>     outputData,
+  tensorMultiplyDataData(       Kokkos::DynRankView<outputDataValueType,    outputDataProperties...>     outputData,
                           const Kokkos::DynRankView<inputDataLeftValueType, inputDataLeftProperties...>  inputDataLeft,
                           const Kokkos::DynRankView<inputDataRightValueType,inputDataRightProperties...> inputDataRight,
                           const char transpose ) {
@@ -745,7 +736,7 @@ namespace Intrepid2 {
     template<typename inoutOperatorViewType,
              typename fieldSignViewType>
     struct F_applyLeftFieldSigns {
-      /**/  inoutOperatorViewType _inoutOperator;
+            inoutOperatorViewType _inoutOperator;
       const fieldSignViewType     _fieldSigns;
 
       KOKKOS_INLINE_FUNCTION
@@ -770,7 +761,7 @@ namespace Intrepid2 {
            typename fieldSignValueType,     class ...fieldSignProperties>
   void
   FunctionSpaceTools<SpT>::  
-  applyLeftFieldSigns( /**/  Kokkos::DynRankView<inoutOperatorValueType,inoutOperatorProperties...> inoutOperator,
+  applyLeftFieldSigns(       Kokkos::DynRankView<inoutOperatorValueType,inoutOperatorProperties...> inoutOperator,
                        const Kokkos::DynRankView<fieldSignValueType,    fieldSignProperties...>     fieldSigns ) {
     
 #ifdef HAVE_INTREPID2_DEBUG
@@ -826,7 +817,7 @@ namespace Intrepid2 {
            typename fieldSignValueType,     class ...fieldSignProperties>
   void
   FunctionSpaceTools<SpT>::  
-  applyRightFieldSigns( /**/  Kokkos::DynRankView<inoutOperatorValueType,inoutOperatorProperties...> inoutOperator,
+  applyRightFieldSigns(       Kokkos::DynRankView<inoutOperatorValueType,inoutOperatorProperties...> inoutOperator,
                         const Kokkos::DynRankView<fieldSignValueType,    fieldSignProperties...>     fieldSigns ) {
 
 #ifdef HAVE_INTREPID2_DEBUG
@@ -843,7 +834,7 @@ namespace Intrepid2 {
     typedef          Kokkos::DynRankView<inoutOperatorValueType,inoutOperatorProperties...>        inoutOperatorViewType;
     typedef          Kokkos::DynRankView<fieldSignValueType,    fieldSignProperties...>            fieldSignViewType;
     typedef          FunctorFunctionSpaceTools::F_applyRightFieldSigns
-      /**/           <inoutOperatorViewType,fieldSignViewType>                                     FunctorType;
+                     <inoutOperatorViewType,fieldSignViewType>                                     FunctorType;
     typedef typename ExecSpace<typename inoutOperatorViewType::execution_space,SpT>::ExecSpaceType ExecSpaceType;
 
     const ordinal_type C = inoutOperator.dimension(0);
@@ -857,7 +848,7 @@ namespace Intrepid2 {
     template<typename inoutFunctionViewType,
              typename fieldSignViewType>
     struct F_applyFieldSigns {
-      /**/  inoutFunctionViewType _inoutFunction;
+            inoutFunctionViewType _inoutFunction;
       const fieldSignViewType     _fieldSigns;
 
       KOKKOS_INLINE_FUNCTION
@@ -886,7 +877,7 @@ namespace Intrepid2 {
            typename fieldSignValueType,     class ...fieldSignProperties>
   void
   FunctionSpaceTools<SpT>::  
-  applyFieldSigns( /**/  Kokkos::DynRankView<inoutFunctionValueType,inoutFunctionProperties...> inoutFunction,
+  applyFieldSigns(       Kokkos::DynRankView<inoutFunctionValueType,inoutFunctionProperties...> inoutFunction,
                    const Kokkos::DynRankView<fieldSignValueType,    fieldSignProperties...>     fieldSigns ) {
     
 #ifdef HAVE_INTREPID2_DEBUG
@@ -904,7 +895,7 @@ namespace Intrepid2 {
     typedef          Kokkos::DynRankView<inoutFunctionValueType,inoutFunctionProperties...>        inoutFunctionViewType;
     typedef          Kokkos::DynRankView<fieldSignValueType,    fieldSignProperties...>            fieldSignViewType;
     typedef          FunctorFunctionSpaceTools::F_applyFieldSigns
-      /**/           <inoutFunctionViewType,fieldSignViewType>                                     FunctorType;
+                     <inoutFunctionViewType,fieldSignViewType>                                     FunctorType;
     typedef typename ExecSpace<typename inoutFunctionViewType::execution_space,SpT>::ExecSpaceType ExecSpaceType;
 
     const ordinal_type C = inoutFunction.dimension(0);
@@ -920,7 +911,7 @@ namespace Intrepid2 {
              typename inputCoeffViewType,
              typename inputFieldViewType>
     struct F_evaluate {
-      /**/  outputPointViewType _outputPointVals;
+            outputPointViewType _outputPointVals;
       const inputCoeffViewType  _inputCoeffs;
       const inputFieldViewType  _inputFields;
       
@@ -953,7 +944,7 @@ namespace Intrepid2 {
            typename inputFieldValueType,  class ...inputFieldProperties>
   void
   FunctionSpaceTools<SpT>::  
-  evaluate( /**/  Kokkos::DynRankView<outputPointValueType,outputPointProperties...> outputPointVals,
+  evaluate(       Kokkos::DynRankView<outputPointValueType,outputPointProperties...> outputPointVals,
             const Kokkos::DynRankView<inputCoeffValueType, inputCoeffProperties...>  inputCoeffs,
             const Kokkos::DynRankView<inputFieldValueType, inputFieldProperties...>  inputFields ) {
     
@@ -979,7 +970,7 @@ namespace Intrepid2 {
     typedef          Kokkos::DynRankView<inputCoeffValueType, inputCoeffProperties...>          inputCoeffViewType;
     typedef          Kokkos::DynRankView<inputFieldValueType, inputFieldProperties...>          inputFieldViewType; 
     typedef          FunctorFunctionSpaceTools::F_evaluate
-      /**/           <outputPointValViewType,inputCoeffViewType,inputFieldViewType>             FunctorType;
+                     <outputPointValViewType,inputCoeffViewType,inputFieldViewType>             FunctorType;
     typedef typename ExecSpace<typename inputCoeffViewType::execution_space,SpT>::ExecSpaceType ExecSpaceType;
     
     const ordinal_type C = inputFields.dimension(0);

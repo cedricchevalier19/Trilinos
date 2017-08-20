@@ -20,6 +20,8 @@ APPEND_SET(SOURCES
   CoalesceDropFactory.cpp
   CoarseMapFactory.cpp
 # CoupledAggregationFactory.cpp
+  FineLevelInputDataFactory.cpp
+  GeneralGeometricPFactory.cpp
   GenericRFactory.cpp
   Hierarchy.cpp
   IntrepidPCoarsenFactory.cpp
@@ -35,11 +37,21 @@ APPEND_SET(SOURCES
   RAPFactory.cpp
   SaPFactory.cpp
   Smoothers/SmootherFactory.cpp
+  StructuredLineDetection.cpp
   TentativePFactory.cpp
   ThresholdAFilterFactory.cpp
   TransPFactory.cpp
+  UnsmooshFactory.cpp
+  UserData/CreateXpetraPreconditioner.cpp
   Utilities
   VariableContainer.cpp
+  VariableDofLaplacianFactory.cpp
+)
+
+TRIBITS_COPY_FILES_TO_BINARY_DIR(UnitTestsUserData_cp
+  SOURCE_DIR ${MueLu_SOURCE_DIR}/test/unit_tests/UserData
+  SOURCE_FILES test.xml
+  DEST_DIR ${CMAKE_CURRENT_BINARY_DIR}/UserData
 )
 
 IF (${PACKAGE_NAME}_ENABLE_Epetra)
@@ -151,17 +163,6 @@ IF (${PACKAGE_NAME}_ENABLE_Zoltan AND TPL_ENABLE_MPI)
   TRIBITS_COPY_FILES_TO_BINARY_DIR(MueLu_Repartition_cp
     SOURCE_DIR ${MueLu_SOURCE_DIR}/test/unit_tests/
     SOURCE_FILES testCoordinates.xml
-  )
-ENDIF()
-
-IF (TPL_ENABLE_yaml-cpp AND TPL_ENABLE_Boost)
-  INCLUDE_DIRECTORIES(${yaml-cpp_INCLUDE_DIRS})
-  INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/../../src/Interface/YamlParameterList)
-  APPEND_SET(SOURCES yaml/YamlParameterList.cpp)
-  TRIBITS_COPY_FILES_TO_BINARY_DIR(MueLu_Yaml_cp
-    SOURCE_DIR ${MueLu_SOURCE_DIR}/test/unit_tests/yaml/
-    DEST_DIR ${CMAKE_CURRENT_BINARY_DIR}/yaml/
-    SOURCE_FILES Match1.yaml Match1.xml Match2.yaml Match2.xml Match3.yaml Match3.xml Match4.yaml Match4.xml Arrays.yaml IllegalKeyString.yaml IntVsDouble.xml IntVsDouble.yaml MueLuConfig.yaml MueLuConfig.xml InconsistentArray.yaml input_restingHydrostatic_RK4.xml plasma_oscillation_rtc.xml
   )
 ENDIF()
 

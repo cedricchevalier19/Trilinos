@@ -69,6 +69,40 @@ IF (${PACKAGE_NAME}_ENABLE_PuLP)
     PASS_REGULAR_EXPRESSION "PASS"
     FAIL_REGULAR_EXPRESSION "FAIL"
   )
+
+  TRIBITS_ADD_TEST(
+    test_driver
+    NAME pulpTestNoDistrib
+    NUM_MPI_PROCS 4
+    COMM serial mpi
+    ARGS
+    "./driverinputs/pulpTestNoDistrib.xml"
+    PASS_REGULAR_EXPRESSION "PASS"
+    FAIL_REGULAR_EXPRESSION "FAIL"
+  )
+
+TRIBITS_ADD_TEST(
+  test_driver
+  NAME pulpVwgtTest
+  NUM_MPI_PROCS 4
+  COMM serial mpi
+  ARGS
+  "./driverinputs/pulpVwgtTest.xml"
+  PASS_REGULAR_EXPRESSION "PASS"
+  FAIL_REGULAR_EXPRESSION "FAIL"
+)
+
+TRIBITS_ADD_TEST(
+  test_driver
+  NAME pulpVwgtTestNoDistrib
+  NUM_MPI_PROCS 4
+  COMM serial mpi
+  ARGS
+  "./driverinputs/pulpVwgtTestNoDistrib.xml"
+  PASS_REGULAR_EXPRESSION "PASS"
+  FAIL_REGULAR_EXPRESSION "FAIL"
+)
+
 ENDIF()
 
 TRIBITS_ADD_TEST(
@@ -128,6 +162,20 @@ TRIBITS_ADD_TEST(
     PASS_REGULAR_EXPRESSION "PASS"
     FAIL_REGULAR_EXPRESSION "FAIL"
 )
+
+IF (${PROJECT_NAME}_ENABLE_Pamgen)
+  TRIBITS_ADD_TEST(
+    test_driver
+    NAME simplePamgenTest
+    NUM_MPI_PROCS 3
+    COMM serial mpi
+    ARGS
+    "./driverinputs/simplePamgen.xml"
+    PASS_REGULAR_EXPRESSION "PASS"
+    FAIL_REGULAR_EXPRESSION "FAIL"
+  )
+ENDIF()
+
 
 # Command that copies files to the executable directory.
 # KDD: I am using this for Zoltan data files.  When Zoltan tests are not built,

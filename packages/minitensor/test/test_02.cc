@@ -332,12 +332,12 @@ TEST(MiniTensor, LinearSolver)
   DIM{11};
 
   Tensor<Real, DIM> const
-  A = 2.0 * eye<Real, DIM>() + Tensor<Real, DIM>(RANDOM_UNIFORM);
+  A = 2.0 * eye<Real, DIM>() + Tensor<Real, DIM>(Filler::RANDOM_UNIFORM);
 
   os << "\n\nMatrix A:" << A;
 
   Vector<Real, DIM> const
-  x(RANDOM_UNIFORM);
+  x(Filler::RANDOM_UNIFORM);
 
   os << "\n\nVector x:" << x;
 
@@ -565,7 +565,7 @@ TEST(MiniTensor, MixedStorage)
   os << "Tensor   : " << A << '\n';
 
   Matrix<Real, 3, 4>
-  B(ONES);
+  B(Filler::ONES);
 
   B.set_dimensions(4, 2);
 
@@ -580,6 +580,16 @@ TEST(MiniTensor, MixedStorage)
 
 TEST(MiniTensor, FailedFlag)
 {
+  bool const
+  print_output = ::testing::GTEST_FLAG(print_time);
+
+  // outputs nothing
+  Teuchos::oblackholestream
+  bhs;
+
+  std::ostream &
+  os = (print_output == true) ? std::cout : bhs;
+
   constexpr Index
   dimension{1};
 
@@ -603,11 +613,23 @@ TEST(MiniTensor, FailedFlag)
 
   minimizer.solve(step, fn, x);
 
+  os << minimizer.failure_message << '\n';
+
   ASSERT_EQ(minimizer.failed, true);
 }
 
 TEST(MiniTensor, Monotonicity)
 {
+  bool const
+  print_output = ::testing::GTEST_FLAG(print_time);
+
+  // outputs nothing
+  Teuchos::oblackholestream
+  bhs;
+
+  std::ostream &
+  os = (print_output == true) ? std::cout : bhs;
+
   constexpr Index
   dimension{1};
 
@@ -632,6 +654,8 @@ TEST(MiniTensor, Monotonicity)
   x(0) = 2.0;
 
   minimizer.solve(step, fn, x);
+
+  os << minimizer.failure_message << '\n';
 
   ASSERT_EQ(minimizer.monotonic, false);
   ASSERT_EQ(minimizer.failed, true);
@@ -674,6 +698,8 @@ TEST(MiniTensor, Boundedness)
 
   minimizer.solve(step, fn, x);
 
+  os << minimizer.failure_message << '\n';
+
   minimizer.printReport(os);
 
   ASSERT_EQ(minimizer.bounded, true);
@@ -692,7 +718,7 @@ TEST(MiniTensor, ConstraintIdentity)
   id;
 
   Vector<Real, NUM_VAR> const
-  x(ZEROS);
+  x(Filler::ZEROS);
 
   Vector<Real, NUM_CONSTR> const
   f = id.value(x);

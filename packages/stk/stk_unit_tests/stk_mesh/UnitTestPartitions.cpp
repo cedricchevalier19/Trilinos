@@ -40,7 +40,7 @@
 #include <stk_mesh/base/Selector.hpp>   // for Selector, operator&, etc
 #include <stk_mesh/base/Types.hpp>      // for PartOrdinal, BucketVector, etc
 #include <stk_mesh/baseImpl/Partition.hpp>  // for Partition
-#include <stk_mesh/fixtures/SelectorFixture.hpp>  // for SelectorFixture
+#include <stk_unit_tests/stk_mesh_fixtures/SelectorFixture.hpp>  // for SelectorFixture
 #include <gtest/gtest.h>
 #include <vector>                       // for vector, vector<>::iterator, etc
 #include "stk_mesh/base/BulkData.hpp"   // for BulkData
@@ -103,9 +103,7 @@ addEntitiesToFixture(SelectorFixture& fixture, stk::mesh::EntityId start_id, siz
   stk::mesh::EntityId ent_id = start_id;
   for (size_t i = 0; i < num_to_add; ++i)
   {
-    stk::mesh::Entity ent =
-      fixture.m_bulk_data.declare_entity(stk::topology::NODE_RANK,
-                                         ent_id, partMembership);
+    stk::mesh::Entity ent = fixture.m_bulk_data.declare_node(ent_id, partMembership);
     collector.push_back(ent);
     ++ent_id;
   }

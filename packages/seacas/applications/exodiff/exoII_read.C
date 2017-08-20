@@ -31,26 +31,25 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
-#include <fstream>
-#include <iostream>
-#include <set>
-#include <sstream>
-#include <string>
-#include <vector>
-
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-
-#include "ED_SystemInterface.h"
+#include "ED_SystemInterface.h" // for ERROR, SystemInterface, etc
 #include "exoII_read.h"
-#include "exo_block.h"
-#include "exodusII.h"
-#include "node_set.h"
-#include "side_set.h"
-#include "smart_assert.h"
-#include "stringx.h"
-#include "util.h"
+#include "exo_block.h"      // for Exo_Block
+#include "exodusII.h"       // for ex_init_params, ex_opts, etc
+#include "node_set.h"       // for Node_Set
+#include "side_set.h"       // for Side_Set
+#include "smart_assert.h"   // for SMART_ASSERT, Assert, etc
+#include "stringx.h"        // for chop_whitespace
+#include "terminal_color.h" // for operator<<, normal, red
+#include "util.h"           // for free_name_array, etc
+#include <algorithm>        // for copy
+#include <cstdio>           // for fclose, FILE, fopen
+#include <cstdlib>          // for exit
+#include <cstring>          // for strlen
+#include <iostream>         // for operator<<, basic_ostream, etc
+#include <set>              // for set
+#include <stdint.h>         // for int64_t
+#include <string>           // for string, char_traits, etc
+#include <vector>           // for vector
 
 namespace {
   void read_vars(int file_id, EXOTYPE flag, const char *type, int num_vars,
@@ -342,7 +341,7 @@ std::string ExoII_Read<INT>::Load_Elmt_Block_Description(size_t block_index) con
   if (!Open())
     return "exodiff: ERROR:  Must open file before loading blocks!";
 
-  SMART_ASSERT(block_index >= 0 && block_index < num_elmt_blocks);
+  SMART_ASSERT(block_index < num_elmt_blocks);
 
   eblocks[block_index].Load_Connectivity();
   //  eblocks[idx].Load_Connectivity();
@@ -369,7 +368,7 @@ template <typename INT> std::string ExoII_Read<INT>::Free_Elmt_Block(size_t bloc
 {
   SMART_ASSERT(Check_State());
 
-  SMART_ASSERT(block_index >= 0 && block_index < num_elmt_blocks);
+  SMART_ASSERT(block_index < num_elmt_blocks);
 
   eblocks[block_index].Free_Connectivity();
   eblocks[block_index].Free_Attributes();
@@ -395,7 +394,7 @@ template <typename INT>
 std::string ExoII_Read<INT>::Give_Connectivity(size_t block_index, size_t &num_e, size_t &npe,
                                                INT *&new_conn)
 {
-  SMART_ASSERT(block_index >= 0 && block_index < num_elmt_blocks);
+  SMART_ASSERT(block_index < num_elmt_blocks);
 
   return eblocks[block_index].Give_Connectivity(num_e, npe, new_conn);
 }
@@ -403,7 +402,7 @@ std::string ExoII_Read<INT>::Give_Connectivity(size_t block_index, size_t &num_e
 template <typename INT> size_t ExoII_Read<INT>::Block_Id(size_t block_index) const
 {
   SMART_ASSERT(Check_State());
-  SMART_ASSERT(block_index >= 0 && block_index < num_elmt_blocks);
+  SMART_ASSERT(block_index < num_elmt_blocks);
   return eblocks[block_index].Id();
 }
 
@@ -633,6 +632,17 @@ template <typename INT> void ExoII_Read<INT>::Free_Nodal_Results()
       delete[] results[i];
       results[i] = nullptr;
     }
+}
+
+template <typename INT> void ExoII_Read<INT>::Free_Nodal_Results(int var_index)
+{
+  SMART_ASSERT(Check_State());
+  if (results) {
+    if (results[var_index]) {
+      delete[] results[var_index];
+      results[var_index] = nullptr;
+    }
+  }
 }
 
 template <typename INT> const double *ExoII_Read<INT>::Get_Nodal_Results(int var_index) const
@@ -955,10 +965,6 @@ template <typename INT> void ExoII_Read<INT>::Display_Maps(std::ostream &s) cons
 template <typename INT> int ExoII_Read<INT>::Check_State() const
 {
   SMART_ASSERT(file_id >= -1);
-  SMART_ASSERT(dimension >= 0);
-  SMART_ASSERT(num_elmt_blocks >= 0);
-  SMART_ASSERT(num_node_sets >= 0);
-  SMART_ASSERT(num_side_sets >= 0);
   SMART_ASSERT(db_version >= 0.0);
   SMART_ASSERT(api_version >= 0.0);
   SMART_ASSERT(io_word_size == 0 || io_word_size == 4 || io_word_size == 8);
@@ -1069,8 +1075,7 @@ template <typename INT> void ExoII_Read<INT>::Get_Init_Data()
 
   if (err > 0 && !interface.quiet_flag)
     std::cerr << "exodiff: WARNING: was issued, number = " << err << '\n';
-  if (dimension < 1 || dimension > 3 || num_elmt_blocks < 0 || num_node_sets < 0 ||
-      num_side_sets < 0) {
+  if (dimension < 1 || dimension > 3) {
     ERROR("Init data appears corrupt:\n"
           << "         dimension = " << dimension << '\n'
           << "         num_nodes = " << num_nodes << '\n'

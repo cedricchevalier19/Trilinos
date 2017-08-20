@@ -244,7 +244,7 @@ namespace Tpetra {
 
     /// \brief The specialization of Kokkos::CrsMatrix that represents
     ///   the part of the sparse matrix on each MPI process.
-    typedef Kokkos::CrsMatrix<impl_scalar_type, LocalOrdinal, execution_space, void,
+    typedef KokkosSparse::CrsMatrix<impl_scalar_type, LocalOrdinal, execution_space, void,
                               typename local_graph_type::size_type> local_matrix_type;
 
     //! DEPRECATED; use <tt>local_matrix_type::row_map_type</tt> instead.
@@ -1961,7 +1961,29 @@ namespace Tpetra {
     //! This matrix's graph, as a CrsGraph.
     Teuchos::RCP<const crs_graph_type> getCrsGraph () const;
 
-    //! The local sparse matrix.
+  private:
+    /// \brief Const reference to this matrix's graph, as a CrsGraph.
+    ///
+    /// This is a thread-safe version of getCrsGraph() (see above).
+    /// Teuchos::RCP's copy constructor, assignment operator
+    /// (operator=), and destructor are not currently thread safe (as
+    /// of 17 May 2017).  Thus, if we want to write
+    /// host-thread-parallel code, it's important to avoid creating or
+    /// destroying Teuchos::RCP instances.  This method lets CrsMatrix
+    /// access its graph, without creating an Teuchos::RCP instance
+    /// (as the return value of getCrsGraph() does do).
+    const crs_graph_type& getCrsGraphRef () const;
+
+  public:
+    /// \brief The local sparse matrix.
+    ///
+    /// \warning It is only valid to call this method under certain
+    ///   circumstances.  In particular, either the CrsMatrix must
+    ///   have been created with a \c local_matrix_type object, or
+    ///   fillComplete must have been called on this CrsMatrix at
+    ///   least once.  This method will do no error checking, so you
+    ///   are responsible for knowing when it is safe to call this
+    ///   method.
     local_matrix_type getLocalMatrix () const {return lclMatrix_; }
 
     /// \brief Number of global elements in the row map of this matrix.
@@ -2381,7 +2403,8 @@ namespace Tpetra {
     ///
     /// This method returns a Vector with the same Map as this
     /// matrix's row Map.  On each process, it contains the diagonal
-    /// entries owned by the calling process.
+    /// entries owned by the calling process. If the matrix has an empty
+    /// row, the diagonal entry contains a zero.
     void
     getLocalDiagCopy (Vector<Scalar, LocalOrdinal, GlobalOrdinal, Node, classic>& diag) const;
 
@@ -2628,6 +2651,47 @@ namespace Tpetra {
                             Y.template getLocalView<device_type> ());
       }
     }
+
+  private:
+
+    /// \brief Compute the local part of a sparse matrix-(Multi)Vector
+    ///   multiply.
+    ///
+    /// This method computes <tt>Y := beta*Y + alpha*Op(A)*X</tt>,
+    /// where <tt>Op(A)</tt> is either \f$A\f$, \f$A^T\f$ (the
+    /// transpose), or \f$A^H\f$ (the conjugate transpose).
+    ///
+    /// The Map of X and \c mode must satisfy the following:
+    /// \code
+    /// mode == Teuchos::NO_TRANS &&
+    ///   X.getMap ()->isSameAs(* (this->getColMap ())) ||
+    /// mode != Teuchos::NO_TRANS &&
+    ///   X.getMap ()->isSameAs(* (this->getRowMap ()));
+    /// \endcode
+    ///
+    /// The Map of Y and \c mode must satisfy the following:
+    /// \code
+    /// mode == Teuchos::NO_TRANS &&
+    ///   Y.getMap ()->isSameAs(* (this->getRowMap ())) ||
+    /// mode != Teuchos::NO_TRANS &&
+    ///   Y.getMap ()->isSameAs(* (this->getColMap ()));
+    /// \endcode
+    ///
+    /// If <tt>beta == 0</tt>, this operation will enjoy overwrite
+    /// semantics: Y's entries will be ignored, and Y will be
+    /// overwritten with the result of the multiplication, even if it
+    /// contains <tt>Inf</tt> or <tt>NaN</tt> floating-point entries.
+    /// Likewise, if <tt>alpha == 0</tt>, this operation will ignore A
+    /// and X, even if they contain <tt>Inf</tt> or <tt>NaN</tt>
+    /// floating-point entries.
+    void
+    localApply (const MultiVector<Scalar, LocalOrdinal, GlobalOrdinal, Node, classic>& X,
+                MultiVector<Scalar, LocalOrdinal, GlobalOrdinal, Node, classic>&Y,
+                const Teuchos::ETransp mode = Teuchos::NO_TRANS,
+                const Scalar& alpha = Teuchos::ScalarTraits<Scalar>::one (),
+                const Scalar& beta = Teuchos::ScalarTraits<Scalar>::zero ()) const;
+
+  public:
 
     /// \brief Gauss-Seidel or SOR on \f$B = A X\f$.
     ///
@@ -3242,7 +3306,16 @@ namespace Tpetra {
                           const Teuchos::ArrayView<const size_t>& numPacketsPerLID,
                           size_t constantNumPackets,
                           Distributor& distor,
-                          CombineMode combineMode);
+                          CombineMode combineMode,
+                          const bool atomic = useAtomicUpdatesByDefault);
+    void
+    unpackAndCombineImplNonStatic (
+        const Teuchos::ArrayView<const LocalOrdinal>& importLIDs,
+        const Teuchos::ArrayView<const char>& imports,
+        const Teuchos::ArrayView<const size_t>& numPacketsPerLID,
+        size_t constantNumPackets,
+        Distributor& distor,
+        CombineMode combineMode);
 
   public:
     /// \brief Unpack the imported column indices and values, and combine into matrix.
@@ -3388,6 +3461,12 @@ namespace Tpetra {
           const Teuchos::ArrayView<size_t>& numPacketsPerLID,
           size_t& constantNumPackets,
           Distributor& distor) const;
+    void
+    packNonStatic (const Teuchos::ArrayView<const LocalOrdinal>& exportLIDs,
+                   Teuchos::Array<char>& exports,
+                   const Teuchos::ArrayView<size_t>& numPacketsPerLID,
+                   size_t& constantNumPackets,
+                   Distributor& distor) const;
 
   private:
     /// \brief Pack data for the current row to send.
@@ -3414,6 +3493,36 @@ namespace Tpetra {
              const size_t numEnt,
              const LocalOrdinal lclRow) const;
 
+    /// \brief Pack data for the current row to send, if the matrix's
+    ///   graph is known to be static (and therefore fill complete,
+    ///   and locally indexed).
+    ///
+    /// \param numEntOut [out] Where to write the number of entries in
+    ///   the row.
+    /// \param valOut [out] Output (packed) array of matrix values.
+    /// \param indOut [out] Output (packed) array of matrix column
+    ///   indices (as global indices).
+    /// \param numEnt [in] Number of entries in the row.
+    /// \param lclRow [in] Local index of the row.
+    ///
+    /// This method does not allocate temporary storage.  We intend
+    /// for this to be safe to call in a thread-parallel way on host
+    /// (not in CUDA).
+    ///
+    /// \return \c true if the method succeeded, else \c false.
+    ///
+    /// \warning (mfh 24 Mar 2017) The current implementation of this
+    ///   kernel assumes CUDA UVM.  If we want to fix that, we need to
+    ///   write a pack kernel for the whole matrix, that runs on
+    ///   device.  As a work-around, consider a fence before and after
+    ///   packing.
+    bool
+    packRowStatic (char* const numEntOut,
+                   char* const valOut,
+                   char* const indOut,
+                   const size_t numEnt,
+                   const LocalOrdinal lclRow) const;
+
     /// \brief Unpack and combine received data for the current row.
     ///
     /// \pre <tt>tmpSize >= numEnt</tt>
@@ -3437,7 +3546,7 @@ namespace Tpetra {
     ///
     /// \return \c true if the method succeeded, else \c false.
     bool
-    unpackRow (Scalar* const valInTmp,
+    unpackRow (impl_scalar_type* const valInTmp,
                GlobalOrdinal* const indInTmp,
                const size_t tmpNumEnt,
                const char* const valIn,
@@ -3706,6 +3815,30 @@ namespace Tpetra {
                          const Teuchos::ArrayView<const Scalar>& values,
                          const Tpetra::CombineMode combineMode);
 
+    /// \brief Combine in the data using the given combine mode.
+    ///
+    /// The copyAndPermute() and unpackAndCombine() methods may this
+    /// function to combine incoming entries from the source matrix
+    /// with the target matrix's current data.  This method's behavior
+    /// depends on whether the target matrix (that is, this matrix)
+    /// has a static graph.
+    ///
+    /// \param lclRow [in] <i>Local</i> row index of the row to modify.
+    /// \param numEnt [in] Number of entries in the input data.
+    /// \param vals [in] Input values to combine.
+    /// \param cols [in] Input (global) column indices corresponding
+    ///   to the above values.
+    /// \param combineMode [in] The CombineMode to use.
+    ///
+    /// \return The number of modified entries.  No error if and only
+    ///   if equal to numEnt.
+    LocalOrdinal
+    combineGlobalValuesRaw (const LocalOrdinal lclRow,
+                            const LocalOrdinal numEnt,
+                            const impl_scalar_type vals[],
+                            const GlobalOrdinal cols[],
+                            const Tpetra::CombineMode combineMode);
+
     /// \brief Transform CrsMatrix entries, using global indices;
     ///   backwards compatibility version that takes
     ///   Teuchos::ArrayView instead of Kokkos::View.
@@ -3795,19 +3928,36 @@ namespace Tpetra {
     ///   the graph must be owned by the matrix.
     void allocateValues (ELocalGlobal lg, GraphAllocationStatus gas);
 
-    /// \brief Sort the entries of each row by their column indices.
+    /// \brief Merge duplicate row indices in the given row, along
+    ///   with their corresponding values.
     ///
-    /// This only does anything if the graph isn't already sorted
-    /// (i.e., ! myGraph_->isSorted ()).  This method is called in
-    /// fillComplete().
-    void sortEntries();
+    /// This method is only called by sortAndMergeIndicesAndValues(),
+    /// and only when the matrix owns the graph, not when the matrix
+    /// was constructed with a const graph.
+    ///
+    /// \pre The graph is not already storage optimized:
+    ///   <tt>isStorageOptimized() == false</tt>
+    size_t
+    mergeRowIndicesAndValues (crs_graph_type& graph,
+                              const RowInfo& rowInfo);
 
-    /// \brief Merge entries in each row with the same column indices.
+    /// \brief Sort and merge duplicate local column indices in all
+    ///   rows on the calling process, along with their corresponding
+    ///   values.
     ///
-    /// This only does anything if the graph isn't already merged
-    /// (i.e., ! myGraph_->isMerged ()).  This method is called in
-    /// fillComplete().
-    void mergeRedundantEntries();
+    /// \pre The matrix is locally indexed (more precisely, not
+    ///   globally indexed).
+    /// \pre The matrix owns its graph.
+    /// \pre The matrix's graph is not already storage optimized:
+    ///   <tt>isStorageOptimized() == false</tt>.
+    ///
+    /// \param sorted [in] If true, the column indices in each row on
+    ///   the calling process are already sorted.
+    /// \param merged [in] If true, the column indices in each row on
+    ///   the calling process are already merged.
+    void
+    sortAndMergeIndicesAndValues (const bool sorted,
+                                  const bool merged);
 
     /// \brief Clear matrix properties that require collectives.
     ///
@@ -3828,6 +3978,10 @@ namespace Tpetra {
     /// This method is called in fillComplete().
     void computeGlobalConstants();
 
+  public:
+    //! Returns true if globalConstants have been computed; false otherwise
+    bool haveGlobalConstants() const;
+  protected:
     /// \brief Column Map MultiVector used in apply() and gaussSeidel().
     ///
     /// This is a column Map MultiVector.  It is used as the target of

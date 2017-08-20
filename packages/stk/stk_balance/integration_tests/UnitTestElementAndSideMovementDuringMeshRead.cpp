@@ -8,7 +8,7 @@
 #include "stk_io/IossBridge.hpp"
 #include "stk_io/InputFile.hpp"         // for InputFile
 #include "stk_unit_test_utils/ioUtils.hpp"
-#include "stk_balance/balance.hpp"
+#include <stk_balance/fixSplitCoincidentElements.hpp>
 
 class StkMeshIoBrokerTester : public stk::io::StkMeshIoBroker
 {
@@ -76,8 +76,6 @@ public:
 
         // stk_mesh_modification_end_after_node_sharing_resolution();
 
-        bulk_data().delete_face_adjacent_element_graph();
-
         // Not sure if this is needed anymore. Don't think it'll be called with a nested modification cycle
         if(!i_started_modification_cycle)
             bulk_data().modification_begin();
@@ -128,7 +126,9 @@ TEST(MeshWithElementAndSide, elementIsMovedDuringReadUsingChangeEntityOwner_side
         read_from_serial_file_and_decompose_tester("generated:1x1x3|sideset:Y", bulk, "cyclic");
         stk::mesh::Entity elem2 = bulk.get_entity(stk::topology::ELEM_RANK, 2);
         if(bulk.is_valid(elem2))
+        {
             EXPECT_EQ(1u, bulk.num_faces(elem2));
+        }
     }
 }
 
@@ -145,11 +145,14 @@ TEST(MeshWithElementAndSide, elementIsMovedDuringReadWhileEnforcingPMR1_sideIsAl
         for(stk::mesh::Entity element : elements)
         {
             if(bulk.bucket(element).topology().is_shell())
+            {
                 EXPECT_EQ(2u, bulk.num_faces(element));
+            }
             else
+            {
                 EXPECT_EQ(1u, bulk.num_faces(element));
+            }
         }
     }
 }
-
 

@@ -45,6 +45,7 @@
 #include <stk_io/StkMeshIoBroker.hpp>
 #include <init/Ionit_Initializer.h>
 
+#include <stk_util/parallel/ParallelReduceBool.hpp>
 #include <stk_util/use_cases/UseCaseEnvironment.hpp>
 #include <stk_util/diag/PrintTimer.hpp>
 
@@ -158,16 +159,10 @@ bool use_case_7_driver(stk::ParallelMachine  comm,
       transfer.initialize();
       transfer.apply();
     } catch (std::exception &e) {
-      std::cout <<__FILE__<<":"<<__LINE__
-                <<" Caught an std::exception with what string:"
-                <<e.what()
-                <<"      rethrowing....."
-                <<std::endl;
+      std::cout <<__FILE__<<":"<<__LINE__ <<" Caught an std::exception with what string:" <<e.what() <<"      rethrowing....." <<std::endl;
       status = status && false;
     } catch (...) {
-      std::cout <<__FILE__<<":"<<__LINE__
-                <<" Caught an exception, rethrowing..."
-                <<std::endl;
+      std::cout <<__FILE__<<":"<<__LINE__ <<" Caught an exception, rethrowing..." <<std::endl;
       status = status && false;
     }
   }
@@ -192,10 +187,7 @@ bool use_case_7_driver(stk::ParallelMachine  comm,
     status = status && success;
   }
   timer.stop();
-//stk::diag::printTimersTable(std::cout, timer,
-//      stk::diag::METRICS_CPU_TIME | stk::diag::METRICS_WALL_TIME, false, comm);
 
-
-  const bool collective_result = use_case::print_status(comm, status);
+  const bool collective_result = stk::is_true_on_all_procs(comm, status);
   return collective_result;
 }

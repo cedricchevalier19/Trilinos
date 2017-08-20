@@ -34,3 +34,7 @@ unique design feature of Trilinos is its focus on packages.
 Trilinos is licensed on a per-package basis. Most packages are now under a BSD
 license, some are published under the (L)GPL. Details can be taken from the
 documentation of each package.
+
+### Pull requests
+
+Pull requests MUST be submitted against the develop branch.  The branch you see on the main page is the master branch.  If you accidentally make your pull request against the master branch, you can switch it to be against the develop branch, by following these instructions: https://github.com/blog/2224-change-the-base-branch-of-a-pull-request

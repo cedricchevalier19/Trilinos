@@ -207,6 +207,8 @@ namespace MueLu {
     static RCP<Teuchos::FancyOStream>                                            MakeFancy(std::ostream& os) { return MueLu::UtilitiesBase<Scalar,LocalOrdinal,GlobalOrdinal,Node>::MakeFancy(os); }
     static typename Teuchos::ScalarTraits<Scalar>::magnitudeType                 Distance2(const Xpetra::MultiVector<Scalar,LocalOrdinal,GlobalOrdinal,Node>& v, LocalOrdinal i0, LocalOrdinal i1) { return MueLu::UtilitiesBase<Scalar,LocalOrdinal,GlobalOrdinal,Node>::Distance2(v,i0,i1); }
     static Teuchos::ArrayRCP<const bool>                                         DetectDirichletRows(const Xpetra::Matrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>& A, const Magnitude& tol = Teuchos::ScalarTraits<Scalar>::magnitude(0.)) { return MueLu::UtilitiesBase<Scalar,LocalOrdinal,GlobalOrdinal,Node>::DetectDirichletRows(A,tol); }
+    static Teuchos::ArrayRCP<const bool>                                         DetectDirichletRowsExt(const Xpetra::Matrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>& A, bool & bHasZeroDiagonal, const Magnitude& tol = Teuchos::ScalarTraits<Scalar>::zero()) { return MueLu::UtilitiesBase<Scalar,LocalOrdinal,GlobalOrdinal,Node>::DetectDirichletRowsExt(A,bHasZeroDiagonal,tol); }
+
     static void                                                                  SetRandomSeed(const Teuchos::Comm<int> &comm) { MueLu::UtilitiesBase<Scalar,LocalOrdinal,GlobalOrdinal,Node>::SetRandomSeed(comm); }
 
     static Scalar PowerMethod(const Xpetra::Matrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>& A, bool scaleByDiag = true,
@@ -226,15 +228,15 @@ namespace MueLu {
     static void MyOldScaleMatrix_Tpetra(Xpetra::Matrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>& Op, const Teuchos::ArrayRCP<Scalar>& scalingVector,
                                         bool doFillComplete, bool doOptimizeStorage);
 
-    static RCP<Xpetra::Matrix<Scalar,LocalOrdinal,GlobalOrdinal,Node> > Transpose(Xpetra::Matrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>& Op, bool optimizeTranspose = false,const std::string & label = std::string());
+    static RCP<Xpetra::Matrix<Scalar,LocalOrdinal,GlobalOrdinal,Node> > Transpose(Xpetra::Matrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>& Op, bool optimizeTranspose = false,const std::string & label = std::string(),const Teuchos::RCP<Teuchos::ParameterList> &params=Teuchos::null);
 
     static RCP<Xpetra::MultiVector<double,LocalOrdinal,GlobalOrdinal,Node> > ExtractCoordinatesFromParameterList(ParameterList& paramList);
 
-    static void FindDirichletRows(Teuchos::RCP<Xpetra::Matrix<Scalar,LocalOrdinal,GlobalOrdinal,Node> > & A, std::vector<LocalOrdinal>& dirichletRows) {
-      MueLu::UtilitiesBase<Scalar,LocalOrdinal,GlobalOrdinal,Node>::FindDirichletRows(A,dirichletRows);
+    static void FindDirichletRows(Teuchos::RCP<Xpetra::Matrix<Scalar,LocalOrdinal,GlobalOrdinal,Node> > & A, std::vector<LocalOrdinal>& dirichletRows,bool count_twos_as_dirichlet=false) {
+      MueLu::UtilitiesBase<Scalar,LocalOrdinal,GlobalOrdinal,Node>::FindDirichletRows(A,dirichletRows,count_twos_as_dirichlet);
     }
 
-    
+
     static void ApplyOAZToMatrixRows(Teuchos::RCP<Xpetra::Matrix<Scalar,LocalOrdinal,GlobalOrdinal,Node> >& A,const std::vector<LocalOrdinal>& dirichletRows) {
       MueLu::UtilitiesBase<Scalar,LocalOrdinal,GlobalOrdinal,Node>::ApplyOAZToMatrixRows(A,dirichletRows);
     }
@@ -555,6 +557,7 @@ namespace MueLu {
     static RCP<Teuchos::FancyOStream>                                            MakeFancy(std::ostream& os) { return MueLu::UtilitiesBase<Scalar,LocalOrdinal,GlobalOrdinal,Node>::MakeFancy(os); }
     static Teuchos::ScalarTraits<Scalar>::magnitudeType                 Distance2(const MultiVector& v, LocalOrdinal i0, LocalOrdinal i1) { return MueLu::UtilitiesBase<Scalar,LocalOrdinal,GlobalOrdinal,Node>::Distance2(v,i0,i1); }
     static Teuchos::ArrayRCP<const bool>                                         DetectDirichletRows(const Matrix& A, const Magnitude& tol = Teuchos::ScalarTraits<Scalar>::zero()) { return MueLu::UtilitiesBase<Scalar,LocalOrdinal,GlobalOrdinal,Node>::DetectDirichletRows(A,tol); }
+    static Teuchos::ArrayRCP<const bool>                                         DetectDirichletRowsExt(const Matrix& A, bool & bHasZeroDiagonal, const Magnitude& tol = Teuchos::ScalarTraits<Scalar>::zero()) { return MueLu::UtilitiesBase<Scalar,LocalOrdinal,GlobalOrdinal,Node>::DetectDirichletRowsExt(A,bHasZeroDiagonal,tol); }
     static void                                                                  SetRandomSeed(const Teuchos::Comm<int> &comm) { MueLu::UtilitiesBase<Scalar,LocalOrdinal,GlobalOrdinal,Node>::SetRandomSeed(comm); }
 
     static Scalar PowerMethod(const Matrix& A, bool scaleByDiag = true,
@@ -707,7 +710,7 @@ namespace MueLu {
         Note: Currently, an error is thrown if the matrix isn't a Tpetra::CrsMatrix or Epetra_CrsMatrix.
         In principle, however, we could allow any Epetra_RowMatrix because the Epetra transposer does.
     */
-    static RCP<Matrix> Transpose(Matrix& Op, bool optimizeTranspose = false,const std::string & label = std::string()) {
+    static RCP<Matrix> Transpose(Matrix& Op, bool optimizeTranspose = false,const std::string & label = std::string(),const Teuchos::RCP<Teuchos::ParameterList> &params=Teuchos::null) {
       switch (Op.getRowMap()->lib()) {
         case Xpetra::UseTpetra: {
 #ifdef HAVE_MUELU_TPETRA
@@ -721,7 +724,7 @@ namespace MueLu {
               // Compute the transpose A of the Tpetra matrix tpetraOp.
               RCP<Tpetra::CrsMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> > A;
               Tpetra::RowMatrixTransposer<Scalar, LocalOrdinal, GlobalOrdinal, Node> transposer(rcpFromRef(tpetraOp),label);
-              A = transposer.createTranspose();
+              A = transposer.createTranspose(params);
               RCP<Xpetra::TpetraCrsMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> > AA   = rcp(new Xpetra::TpetraCrsMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>(A));
               RCP<CrsMatrix>                                                           AAA  = rcp_implicit_cast<CrsMatrix>(AA);
               RCP<Matrix>                                                              AAAA = rcp( new CrsMatrixWrap(AAA));
@@ -755,7 +758,6 @@ namespace MueLu {
             RCP<EpetraCrsMatrix> AA   = rcp(new EpetraCrsMatrix(rcpA));
             RCP<CrsMatrix>       AAA  = rcp_implicit_cast<CrsMatrix>(AA);
             RCP<Matrix>          AAAA = rcp( new CrsMatrixWrap(AAA));
-            AAAA->fillComplete(Op.getRangeMap(), Op.getDomainMap());
 
             if (Op.IsView("stridedMaps"))
               AAAA->CreateView("stridedMaps", Teuchos::rcpFromRef(Op), true/*doTranspose*/);
@@ -832,6 +834,12 @@ namespace MueLu {
         TEUCHOS_TEST_FOR_EXCEPT(doubleEpCoords->NumVectors() != Teuchos::as<int>(coordinates->getNumVectors()));
       }
   #endif
+
+      // check for Xpetra coordinates vector
+      if(paramList.isType<decltype(coordinates)>("Coordinates")) {
+        coordinates = paramList.get<decltype(coordinates)>("Coordinates");
+      }
+
       TEUCHOS_TEST_FOR_EXCEPT(Teuchos::is_null(coordinates));
       return coordinates;
     }
@@ -857,6 +865,10 @@ namespace MueLu {
   /*! Returns true if a parameter name is a valid Muemex custom level variable, e.g. "MultiVector myArray"
   */
   bool IsParamMuemexVariable(const std::string& name);
+
+  /*! Returns true if a parameter name is a valid user custom level variable, e.g. "MultiVector myArray"
+  */
+  bool IsParamValidVariable(const std::string& name);
 
 #ifdef HAVE_MUELU_EPETRA
   /*! \fn EpetraCrs_To_XpetraMatrix

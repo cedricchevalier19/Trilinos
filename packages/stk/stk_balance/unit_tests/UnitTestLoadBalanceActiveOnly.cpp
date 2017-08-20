@@ -55,7 +55,9 @@ protected:
     {
         for(size_t i = 0; i < elementsMarkedForDeactivation.size(); ++i)
             if(get_bulk().parallel_rank() == originalOwningProc[i])
+            {
                 EXPECT_TRUE(get_bulk().bucket(elementsMarkedForDeactivation[i]).owned());
+            }
     }
 
     void mark_element_for_deactivation(stk::mesh::EntityId id)
@@ -72,7 +74,7 @@ protected:
     {
         get_bulk().modification_begin();
         for(stk::mesh::Entity& element : elementsMarkedForDeactivation)
-            get_bulk().change_entity_parts(element, {}, {&activePart});
+            get_bulk().change_entity_parts(element, stk::mesh::ConstPartVector{}, stk::mesh::ConstPartVector{&activePart});
         get_bulk().modification_end();
     }
 

@@ -84,6 +84,7 @@
 
 #include <Xpetra_BlockedCrsMatrix.hpp>
 //#include <Xpetra_DefaultPlatform.hpp>
+#include <Xpetra_IO.hpp>
 #include <Xpetra_Import.hpp>
 #include <Xpetra_ImportFactory.hpp>
 #include <Xpetra_Map.hpp>
@@ -112,9 +113,10 @@ namespace MueLu {
 #endif
 
 #ifdef HAVE_MUELU_EPETRA
-  //defined after Utilities class
   template<typename SC,typename LO,typename GO,typename NO>
-  RCP<Xpetra::CrsMatrixWrap<SC,LO,GO,NO> > Convert_Epetra_CrsMatrix_ToXpetra_CrsMatrixWrap(RCP<Epetra_CrsMatrix> &epAB);
+  RCP<Xpetra::CrsMatrixWrap<SC,LO,GO,NO> > Convert_Epetra_CrsMatrix_ToXpetra_CrsMatrixWrap(RCP<Epetra_CrsMatrix> &epAB){
+    return Xpetra::Convert_Epetra_CrsMatrix_ToXpetra_CrsMatrixWrap<SC,LO,GO,NO>(epAB);
+  }
 #endif
 
 #ifdef HAVE_MUELU_EPETRA
@@ -466,7 +468,7 @@ namespace MueLu {
   template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
   RCP<Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> >
   Utilities<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-  Transpose (Xpetra::Matrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>& Op, bool optimizeTranspose,const std::string & label) {
+  Transpose (Xpetra::Matrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>& Op, bool optimizeTranspose,const std::string & label,const Teuchos::RCP<Teuchos::ParameterList> &params) {
 #if defined(HAVE_MUELU_EPETRA) && defined(HAVE_MUELU_EPETRAEXT)
     std::string TorE = "epetra";
 #else
@@ -489,7 +491,7 @@ namespace MueLu {
 
         RCP<Tpetra::CrsMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> > A;
         Tpetra::RowMatrixTransposer<Scalar, LocalOrdinal, GlobalOrdinal, Node> transposer(rcpFromRef(tpetraOp),label); //more than meets the eye
-        A = transposer.createTranspose();
+        A = transposer.createTranspose(params);
 
         RCP<Xpetra::TpetraCrsMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> > AA   = rcp(new Xpetra::TpetraCrsMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>(A) );
         RCP<Xpetra::CrsMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> >       AAA  = rcp_implicit_cast<Xpetra::CrsMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> >(AA);
@@ -571,6 +573,12 @@ namespace MueLu {
     throw Exceptions::RuntimeError("ExtractCoordinatesFromParameterList: The coordinates vector in parameter list is expected to be a Tpetra multivector with SC=double or float.");
 #endif
 #endif // endif HAVE_TPETRA
+
+    // check for Xpetra coordinates vector
+    if(paramList.isType<decltype(coordinates)>("Coordinates")) {
+      coordinates = paramList.get<decltype(coordinates)>("Coordinates");
+    }
+
     return coordinates;
   } // ExtractCoordinatesFromParameterList
 

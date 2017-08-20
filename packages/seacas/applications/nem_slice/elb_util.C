@@ -53,9 +53,8 @@
 #include "elb_util.h"
 #include <cassert> // for assert
 #include <cctype>  // for isupper, tolower
-#include <cmath>
+#include <cmath>   // for ceil, floor
 #include <cstddef> // for size_t
-#include <cstdlib>
 #include <cstring> // for strlen
 
 /*****************************************************************************/

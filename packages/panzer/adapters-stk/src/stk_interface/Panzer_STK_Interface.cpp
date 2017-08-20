@@ -60,6 +60,7 @@
 // #include <stk_rebalance_utils/RebalanceUtils.hpp>
 
 #include <stk_util/parallel/ParallelReduce.hpp>
+#include <stk_util/parallel/CommSparse.hpp>
 
 #ifdef PANZER_HAVE_IOSS
 #include <Ionit_Initializer.h>
@@ -339,7 +340,7 @@ void STK_Interface::endModification()
    // find where shared entities are being created in Panzer and declare it.
    // Once this is done, the extra code below can be deleted.
 
-    stk::CommAll comm(bulkData_->parallel());
+    stk::CommSparse comm(bulkData_->parallel());
 
     for (int phase=0;phase<2;++phase) {
       for (int i=0;i<bulkData_->parallel_size();++i) {
@@ -358,7 +359,7 @@ void STK_Interface::endModification()
       }
 
       if (phase == 0 ) {
-        comm.allocate_buffers( bulkData_->parallel_size()/4 );
+        comm.allocate_buffers();
       }
       else {
         comm.communicate();
@@ -964,12 +965,11 @@ std::size_t STK_Interface::elementLocalId(stk::mesh::EntityId gid) const
 }
 
 
-std::string STK_Interface::containingBlockId(stk::mesh::Entity elmt)
+std::string STK_Interface::containingBlockId(stk::mesh::Entity elmt) const
 {
-   std::map<std::string,stk::mesh::Part*>::const_iterator itr;
-   for(itr=elementBlocks_.begin();itr!=elementBlocks_.end();++itr)
-      if(bulkData_->bucket(elmt).member(*itr->second))
-         return itr->first;
+   for(const auto & eb_pair : elementBlocks_)
+      if(bulkData_->bucket(elmt).member(*(eb_pair.second)))
+         return eb_pair.first;
    return "";
 }
 
@@ -1317,6 +1317,13 @@ void STK_Interface::rebalance(const Teuchos::ParameterList & params)
   currentLocalId_ = 0;
   orderedElementVector_ = Teuchos::null; // forces rebuild of ordered lists
 #endif
+}
+
+Teuchos::RCP<const Teuchos::Comm<int> >
+STK_Interface::getComm() const
+{
+  TEUCHOS_ASSERT(this->isInitialized());
+  return mpiComm_;
 }
 
 } // end namespace panzer_stk

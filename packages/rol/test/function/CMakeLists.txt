@@ -1,3 +1,4 @@
+ADD_SUBDIRECTORY(operator)
 
 TRIBITS_ADD_EXECUTABLE_AND_TEST(
   DerivativeCheck
@@ -93,5 +94,30 @@ TRIBITS_ADD_EXECUTABLE(
   ColemanLiModelCheck
   SOURCES test_11.cpp
   ADD_DIR_TO_NAME
+  )
+
+TRIBITS_ADD_EXECUTABLE_AND_TEST(
+  HouseholderReflectorCheck
+  SOURCES test_12.cpp
+  ARGS PrintItAll
+  NUM_MPI_PROCS 1
+  PASS_REGULAR_EXPRESSION "TEST PASSED"
+  ADD_DIR_TO_NAME
+  )
+
+TRIBITS_ADD_EXECUTABLE_AND_TEST(
+  BinaryConstraintCheck
+  SOURCES test_13.cpp
+  ARGS PrintItAll
+  PASS_REGULAR_EXPRESSION "TEST PASSED"
+  ADD_DIR_TO_NAME
+  )
+
+  TRIBITS_COPY_FILES_TO_BINARY_DIR(
+    BinaryConstraintDataCopy
+    SOURCE_FILES
+     binary_constraint.xml
+    SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+    DEST_DIR "${CMAKE_CURRENT_BINARY_DIR}"
   )
 

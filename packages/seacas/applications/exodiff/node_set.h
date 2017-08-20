@@ -43,8 +43,8 @@ template <typename INT> class Node_Set : public Exo_Entity
 {
 public:
   Node_Set();
-  Node_Set(int file_id, size_t exo_set_id);
-  Node_Set(int file_id, size_t exo_set_id, size_t num_nodes, size_t num_dist_factors_x = 0);
+  Node_Set(int file_id, size_t id);
+  Node_Set(int file_id, size_t id, size_t nnodes, size_t ndfs = 0);
   ~Node_Set() override;
 
   void apply_map(const INT *node_map);
@@ -53,6 +53,7 @@ public:
   size_t Node_Index(size_t position) const;
 
   const double *Distribution_Factors() const;
+  void          Free_Distribution_Factors() const;
 
   void Display(std::ostream & = std::cout);
   int  Check_State() const;

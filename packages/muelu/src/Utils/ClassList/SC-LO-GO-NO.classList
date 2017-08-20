@@ -31,6 +31,8 @@ FactoryManager
 FakeSmootherPrototype
 FilteredAFactory
 FilteredAFactory_kokkos - #if defined(HAVE_MUELU_KOKKOS_REFACTOR)
+FineLevelInputDataFactory
+GeneralGeometricPFactory
 GenericRFactory
 GMRESSolver
 Hierarchy
@@ -82,6 +84,7 @@ SmootherFactory
 SmootherPrototype
 SolverBase
 SteepestDescentSolver
+StructuredLineDetectionFactory
 SubBlockAFactory
 TekoSmoother - #if defined(HAVE_MUELU_EXPERIMENTAL) && defined(HAVE_MUELU_TEKO)
 TentativePFactory
@@ -94,10 +97,12 @@ TopSmootherFactory
 TpetraOperator
 TransPFactory
 TrilinosSmoother
+UnsmooshFactory
 UserPFactory
 Utilities
 UtilitiesBase
 Utilities_kokkos - #if defined(HAVE_MUELU_KOKKOS_REFACTOR)
+VariableDofLaplacianFactory
 SemiCoarsenPFactory
 UzawaSmoother - #ifdef HAVE_MUELU_EXPERIMENTAL
 VisualizationHelpers

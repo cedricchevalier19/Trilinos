@@ -63,9 +63,8 @@
 
 //**********************************************************************
 template<typename DataT>
-KOKKOS_FORCEINLINE_FUNCTION
 PHX::MDField<DataT,void,void,void,void,void,void,void,void>::
-MDField(const std::string& name, const Teuchos::RCP<PHX::DataLayout>& t) :
+MDField(const std::string& name, const Teuchos::RCP<const PHX::DataLayout>& t) :
   m_tag(name,t)
 #ifdef PHX_DEBUG
   , m_tag_set(true),
@@ -75,7 +74,6 @@ MDField(const std::string& name, const Teuchos::RCP<PHX::DataLayout>& t) :
 
 //**********************************************************************
 template<typename DataT>
-KOKKOS_FORCEINLINE_FUNCTION
 PHX::MDField<DataT,void,void,void,void,void,void,void,void>::
 MDField(const PHX::Tag<DataT>& v) :
   m_tag(v)
@@ -87,7 +85,6 @@ MDField(const PHX::Tag<DataT>& v) :
 
 //**********************************************************************
 template<typename DataT>
-KOKKOS_FORCEINLINE_FUNCTION
 PHX::MDField<DataT,void,void,void,void,void,void,void,void>::
 MDField() :
   m_tag("???", Teuchos::null)
@@ -99,7 +96,31 @@ MDField() :
 
 //**********************************************************************
 template<typename DataT>
-KOKKOS_FORCEINLINE_FUNCTION
+template<typename CopyDataT,
+         typename T0, typename T1, typename T2, 
+         typename T3, typename T4, typename T5,
+         typename T6, typename T7>
+PHX::MDField<DataT,void,void,void,void,void,void,void,void>::
+MDField(const MDField<CopyDataT,T0,T1,T2,T3,T4,T5,T6,T7>& source) :
+  m_tag(source.m_tag),
+  m_field_data(source.m_field_data)
+#ifdef PHX_DEBUG
+  ,m_tag_set(source.m_tag_set),
+  m_data_set(source.m_data_set)
+#endif  
+{
+#ifdef PHX_DEBUG
+  // Don't enforce rank for DynRank MDField. Since rank is dynamic,
+  // changing the rank at runtime by assignment is allowed!
+  // TEUCHOS_TEST_FOR_EXCEPTION(this->rank() == source.rank(), std::runtime_error,
+  //                            "ERROR: Rank mismatch in DynRank MDField copy ctor for field \"" << m_tag.name() << "\"!");
+#endif
+  static_assert(std::is_same<typename std::decay<DataT>::type, typename std::decay<CopyDataT>::type>::value,
+                "ERROR: DynRank MDField copy ctor requires scalar types to be the same!");
+}
+
+//**********************************************************************
+template<typename DataT>
 PHX::MDField<DataT,void,void,void,void,void,void,void,void>::
 ~MDField()
 { }
@@ -115,6 +136,32 @@ fieldTag() const
   TEUCHOS_TEST_FOR_EXCEPTION(!m_tag_set, std::logic_error, m_field_tag_error_msg);
 #endif
   return m_tag;
+}
+
+//**********************************************************************
+template<typename DataT>
+template<typename CopyDataT,
+         typename T0, typename T1, typename T2, 
+         typename T3, typename T4, typename T5,
+         typename T6, typename T7>
+PHX::MDField<DataT,void,void,void,void,void,void,void,void>&
+PHX::MDField<DataT,void,void,void,void,void,void,void,void>::
+operator=(const MDField<CopyDataT,T0,T1,T2,T3,T4,T5,T6,T7>& source)
+{
+  m_tag = source.m_tag;
+  m_field_data = source.m_field_data;
+#ifdef PHX_DEBUG
+  m_tag_set = source.m_tag_set;
+  m_data_set = source.m_data_set;
+  // Don't enforce rank for DynRank MDField. Since rank is dynamic,
+  // changing the rank at runtime by assignment is allowed!
+  // TEUCHOS_TEST_FOR_EXCEPTION(this->rank() == source.rank(), std::runtime_error,
+  //                            "ERROR: Rank mismatch in DynRank MDField copy ctor for field \"" << m_tag.name() << "\"!");
+#endif
+  static_assert(std::is_same<typename std::decay<DataT>::type, typename std::decay<CopyDataT>::type>::value,
+                "ERROR: Compiletime MDField assignment operator requires scalar types to be the same!");
+
+  return *this;
 }
 
 //**********************************************************************
@@ -270,11 +317,7 @@ KOKKOS_FORCEINLINE_FUNCTION
 typename PHX::MDField<DataT,void,void,void,void,void,void,void,void>::size_type 
 PHX::MDField<DataT,void,void,void,void,void,void,void,void>::
 rank() const
-{ 
-#if defined( PHX_DEBUG) && !defined (__CUDA_ARCH__ )
-  TEUCHOS_TEST_FOR_EXCEPTION(!m_tag_set, std::logic_error, m_field_data_error_msg);
-  TEUCHOS_TEST_FOR_EXCEPTION(!m_data_set, std::logic_error, m_field_data_error_msg);
-#endif
+{
   return m_field_data.rank();
 }
 
@@ -286,28 +329,23 @@ typename PHX::MDField<DataT,void,void,void,void,void,void,void,void>::size_type
 PHX::MDField<DataT,void,void,void,void,void,void,void,void>::
 dimension(const iType& ord) const
 { 
-#if defined( PHX_DEBUG) && !defined (__CUDA_ARCH__ )
-  TEUCHOS_TEST_FOR_EXCEPTION(!m_tag_set, std::logic_error, m_field_data_error_msg);
-  TEUCHOS_TEST_FOR_EXCEPTION(!m_data_set, std::logic_error, m_field_data_error_msg);
-#endif
   return m_field_data.extent(ord);
 }
 
 //**********************************************************************
 template<typename DataT>
 template<typename iType>
-KOKKOS_FORCEINLINE_FUNCTION
 void PHX::MDField<DataT,void,void,void,void,void,void,void,void>::
 dimensions(std::vector<iType>& dims)
 { 
 #if defined( PHX_DEBUG) && !defined (__CUDA_ARCH__ )
-  TEUCHOS_TEST_FOR_EXCEPTION(!m_tag_set, std::logic_error, m_field_data_error_msg);
+  TEUCHOS_TEST_FOR_EXCEPTION(!m_tag_set, std::logic_error, m_field_tag_error_msg);
   TEUCHOS_TEST_FOR_EXCEPTION(!m_data_set, std::logic_error, m_field_data_error_msg);
 #endif
   
   dims.resize(m_tag.dataLayout().rank());
   for ( size_type i = 0 ; i <  m_tag.dataLayout().rank(); ++i ) 
-    dims[i] = static_cast<iType>(m_tag.dataLayout().dimension(i)); // dangerous
+    dims[i] = static_cast<iType>(m_field_data.extent(i)); // dangerous
 }
 
 //**********************************************************************

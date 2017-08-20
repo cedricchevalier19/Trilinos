@@ -53,6 +53,7 @@
 #include <Teuchos_YamlParameterListCoreHelpers.hpp>
 #include <Teuchos_RCP.hpp>
 #include <Teuchos_Exceptions.hpp>
+#include <Teuchos_TwoDArray.hpp>
 
 
 
@@ -129,5 +130,51 @@ namespace TeuchosTests
       }
     });
   }
-
+  TEUCHOS_UNIT_TEST(YAML, TwoDArrayConvert)
+  {
+    std::string xmlString =
+      "  <ParameterList>\n"
+      "    <ParameterList name=\"Problem\">\n"
+      "      <ParameterList name=\"Neumann BCs\">\n"
+      "        <ParameterList name=\"Time Dependent NBC on SS cyl_outside for DOF all set P\">\n"
+      "          <Parameter name=\"BC Values\" type=\"TwoDArray(double)\" value=\"3x1:{ 0.0, 10.0, 20.0}\"/>\n"
+      "        </ParameterList>\n"
+      "      </ParameterList>\n"
+      "    </ParameterList>\n"
+      "    <ParameterList name=\"Discretization\">\n"
+      "      <Parameter name=\"Node Set Associations\" type=\"TwoDArray(string)\" value=\"2x2:{1, 2, top, bottom}\"/>\n"
+      "    </ParameterList>\n"
+      "  </ParameterList>\n";
+    RCP<ParameterList> xmlParams = Teuchos::getParametersFromXmlString(xmlString);
+    std::stringstream yamlOutStream;
+    Teuchos::YAMLParameterList::writeYamlStream(yamlOutStream, *xmlParams);
+    std::string yamlString = yamlOutStream.str();
+    std::string expectedYamlString =
+      "%YAML 1.1\n"
+      "---\n"
+      "ANONYMOUS:\n"
+      "  Problem: \n"
+      "    Neumann BCs: \n"
+      "      Time Dependent NBC on SS cyl_outside for DOF all set P: \n"
+      "        BC Values: [[0], [10], [20]]\n"
+      "  Discretization: \n"
+      "    Node Set Associations: [['1', '2'], [top, bottom]]\n"
+      "...\n";
+    TEST_EQUALITY(yamlString, expectedYamlString);
+    std::stringstream yamlInStream(yamlString);
+    RCP<ParameterList> yamlParams;
+    yamlParams = Teuchos::YAMLParameterList::parseYamlStream(yamlInStream);
+    std::stringstream yamlOutStream2;
+    Teuchos::YAMLParameterList::writeYamlStream(yamlOutStream2, *yamlParams);
+    std::string yamlString2 = yamlOutStream2.str();
+  /* There are issues with older versions of yaml-cpp not maintaining the order
+     of parameters in a list. see Trilinos issue #1268.
+     that is why we use the Unordered comparison instead of the pure text one. */
+  //TEST_EQUALITY(yamlString2, expectedYamlString);
+    std::stringstream yamlInStream2(yamlString2);
+    RCP<ParameterList> yamlParams2;
+    yamlParams2 = Teuchos::YAMLParameterList::parseYamlStream(yamlInStream2);
+    TEST_EQUALITY(Teuchos::haveSameValuesUnordered(*yamlParams, *yamlParams2), true);
+  }
 } //namespace TeuchosTests
+

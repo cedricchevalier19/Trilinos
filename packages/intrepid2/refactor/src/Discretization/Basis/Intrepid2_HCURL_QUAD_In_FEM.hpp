@@ -58,6 +58,7 @@ namespace Intrepid2 {
     
     class Basis_HCURL_QUAD_In_FEM {
     public:
+      typedef struct Quadrilateral<4> cell_topology_type;
 
       template<EOperator opType>
       struct Serial {
@@ -67,9 +68,9 @@ namespace Intrepid2 {
                  typename vinvViewType>
         KOKKOS_INLINE_FUNCTION
         static void
-        getValues( /**/  outputValueViewType outputValues,
+        getValues(       outputValueViewType outputValues,
                    const inputPointViewType  inputPoints,
-                   /**/  workViewType        work,
+                         workViewType        work,
                    const vinvViewType        vinvLine,
                    const vinvViewType        vinvBubble );
       };
@@ -79,7 +80,7 @@ namespace Intrepid2 {
                typename inputPointValueType,  class ...inputPointProperties,
                typename vinvValueType,        class ...vinvProperties>
       static void
-      getValues(  /**/  Kokkos::DynRankView<outputValueValueType,outputValueProperties...> outputValues,
+      getValues(        Kokkos::DynRankView<outputValueValueType,outputValueProperties...> outputValues,
                   const Kokkos::DynRankView<inputPointValueType, inputPointProperties...>  inputPoints,
                   const Kokkos::DynRankView<vinvValueType,       vinvProperties...>        vinvLine,
                   const Kokkos::DynRankView<vinvValueType,       vinvProperties...>        vinvBubble,
@@ -91,7 +92,7 @@ namespace Intrepid2 {
                EOperator opType,
                ordinal_type numPtsEval>
       struct Functor {
-        /**/  outputValueViewType _outputValues;
+              outputValueViewType _outputValues;
         const inputPointViewType  _inputPoints;
         const vinvViewType        _vinvLine;
         const vinvViewType        _vinvBubble;
@@ -169,7 +170,7 @@ namespace Intrepid2 {
 
     virtual
     void
-    getValues( /**/  outputViewType outputValues,
+    getValues(       outputViewType outputValues,
                const pointViewType  inputPoints,
                const EOperator operatorType = OPERATOR_VALUE ) const {
 #ifdef HAVE_INTREPID2_DEBUG
@@ -179,7 +180,7 @@ namespace Intrepid2 {
                                       this->getBaseCellTopology(),
                                       this->getCardinality() );
 #endif
-      constexpr ordinal_type numPtsPerEval = 1;
+      constexpr ordinal_type numPtsPerEval = Parameters::MaxNumPtsPerBasisEval;
       Impl::Basis_HCURL_QUAD_In_FEM::
         getValues<ExecSpaceType,numPtsPerEval>( outputValues,
                                                 inputPoints,

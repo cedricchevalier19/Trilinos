@@ -53,25 +53,11 @@
 #include "Ioss_Region.h"
 #include "Ioss_State.h"
 
-#ifdef HAVE_MPI
-#include <mpi.h>
-#endif
-
 #define OUTPUT std::cerr
 
 // ========================================================================
 
 namespace {
-
-  template <typename T> struct remove_pointer
-  {
-    typedef T type;
-  };
-  template <typename T> struct remove_pointer<T *>
-  {
-    typedef T type;
-  };
-
   // Data space shared by most field input/output routines...
   std::vector<char> data;
 

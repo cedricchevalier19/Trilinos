@@ -139,13 +139,14 @@ namespace Intrepid2 {
 
     class Basis_HGRAD_HEX_C2_FEM {
     public:
+      typedef struct Hexahedron<27> cell_topology_type;
       template<EOperator opType>
       struct Serial {
         template<typename outputViewType,
                  typename inputViewType>
         KOKKOS_INLINE_FUNCTION
         static void
-        getValues( /**/  outputViewType output,
+        getValues(       outputViewType output,
                    const inputViewType input );
         
       };
@@ -154,7 +155,7 @@ namespace Intrepid2 {
                typename outputValueValueType, class ...outputValueProperties,
                typename inputPointValueType,  class ...inputPointProperties>
       static void
-      getValues( /**/  Kokkos::DynRankView<outputValueValueType,outputValueProperties...> outputValues,
+      getValues(       Kokkos::DynRankView<outputValueValueType,outputValueProperties...> outputValues,
                  const Kokkos::DynRankView<inputPointValueType, inputPointProperties...>  inputPoints,
                  const EOperator operatorType);
       
@@ -162,12 +163,12 @@ namespace Intrepid2 {
                typename inputPointViewType,
                EOperator opType>
       struct Functor {
-        /**/  outputValueViewType _outputValues;
+              outputValueViewType _outputValues;
         const inputPointViewType  _inputPoints;
         
         KOKKOS_INLINE_FUNCTION
-        Functor( /**/  outputValueViewType outputValues_,
-                 /**/  inputPointViewType  inputPoints_ )
+        Functor(       outputValueViewType outputValues_,
+                       inputPointViewType  inputPoints_ )
           : _outputValues(outputValues_), _inputPoints(inputPoints_) {}
         
         KOKKOS_INLINE_FUNCTION
@@ -227,7 +228,7 @@ namespace Intrepid2 {
 
     virtual
     void
-    getValues( /**/  outputViewType outputValues,
+    getValues(       outputViewType outputValues,
                const pointViewType  inputPoints,
                const EOperator operatorType = OPERATOR_VALUE ) const {
 #ifdef HAVE_INTREPID2_DEBUG

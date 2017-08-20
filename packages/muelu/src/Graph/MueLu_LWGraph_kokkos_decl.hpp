@@ -75,11 +75,12 @@ namespace MueLu {
   template<class LocalOrdinal, class GlobalOrdinal, class DeviceType>
   class LWGraph_kokkos<LocalOrdinal, GlobalOrdinal, Kokkos::Compat::KokkosDeviceWrapperNode<DeviceType>> {
   public:
-    typedef LocalOrdinal                                        local_ordinal_type;
-    typedef GlobalOrdinal                                       global_ordinal_type;
-    typedef typename DeviceType::execution_space                execution_space;
-    typedef Kokkos::Compat::KokkosDeviceWrapperNode<DeviceType> node_type;
-    typedef size_t                                              size_type;
+    typedef LocalOrdinal                                             local_ordinal_type;
+    typedef GlobalOrdinal                                            global_ordinal_type;
+    typedef typename DeviceType::execution_space                     execution_space;
+    typedef Kokkos::RangePolicy<local_ordinal_type, execution_space> range_type;
+    typedef Kokkos::Compat::KokkosDeviceWrapperNode<DeviceType>      node_type;
+    typedef size_t                                                   size_type;
 
     typedef Xpetra::Map<LocalOrdinal, GlobalOrdinal, node_type> map_type;
     typedef Kokkos::StaticCrsGraph<LocalOrdinal, Kokkos::LayoutLeft, execution_space> local_graph_type;
@@ -96,9 +97,16 @@ namespace MueLu {
 
     //! @name Constructors/Destructors.
     //@{
+
+    //! LWGraph constructor
+    //
+    // @param[in] graph: local graph of type Kokkos::CsrStaticGraph containing CSR data
+    // @param[in] domainMap: non-overlapping (domain) map for graph. Usually provided by AmalgamationFactory stored in UnAmalgamationInfo container
+    // @param[in] importMap: overlapping map for graph. Usually provided by AmalgamationFactory stored in UnAmalgamationInfo container
+    // @param[in] objectLabel: label string
     LWGraph_kokkos(const local_graph_type&    graph,
                    const RCP<const map_type>& domainMap,
-                   const RCP<const map_type>& rangeMap,
+                   const RCP<const map_type>& importMap,
                    const std::string&         objectLabel = "");
 
     ~LWGraph_kokkos() { }

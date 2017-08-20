@@ -1,10 +1,10 @@
 TRIBITS_PACKAGE_DEFINE_DEPENDENCIES(
   SUBPACKAGES_DIRS_CLASSIFICATIONS_OPTREQS
-  Exodus      libraries/exodus        PT  OPTIONAL
+  Exodus      libraries/exodus        PT  REQUIRED
   Exodus_for  libraries/exodus_for    PT  OPTIONAL
   ExoIIv2for32 libraries/exoIIv2for32 PT  OPTIONAL
   Nemesis     libraries/nemesis       PT  OPTIONAL
-  Ioss        libraries/ioss          PT  OPTIONAL
+  Ioss        libraries/ioss          PT  REQUIRED
   Chaco       libraries/chaco         PT  OPTIONAL
   Aprepro_lib libraries/aprepro_lib   PT  OPTIONAL
   Supes       libraries/supes         PT  OPTIONAL
@@ -38,6 +38,7 @@ TRIBITS_PACKAGE_DEFINE_DEPENDENCIES(
   Nemslice    applications/nem_slice  PT  OPTIONAL
   Nemspread   applications/nem_spread PT  OPTIONAL
   Numbers     applications/numbers    PT  OPTIONAL
+#  Slice	      applications/slice      ST  OPTIONAL
   Txtexo      applications/txtexo     PT  OPTIONAL
   Ex2ex1v2    applications/ex2ex1v2   PT  OPTIONAL
 )

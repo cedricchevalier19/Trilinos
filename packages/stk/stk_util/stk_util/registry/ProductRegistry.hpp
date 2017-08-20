@@ -34,8 +34,9 @@
 #ifndef STK_UTIL_REGISTRY_PRODUCTREGISTRY_HPP
 #define STK_UTIL_REGISTRY_PRODUCTREGISTRY_HPP
 
-#include <map>
-#include <string>
+#include <stddef.h>                     // for size_t
+#include <map>                          // for map, map<>::const_iterator, etc
+#include <string>                       // for string, operator<
 
 namespace stk {
 
@@ -50,7 +51,6 @@ namespace stk {
  * <b>BUILD_TIME</b> attributes set.
  *
  * You may add any other attribute keyword and values to the product registry.
- *
  */
 class ProductRegistry
 {
@@ -68,7 +68,6 @@ public:
 private:
   /**
    * Creates a new <b>ProductRegistry</b> instance.
-   *
    */
   ProductRegistry()
     : m_productMap(),
@@ -83,7 +82,6 @@ private:
   ~ProductRegistry()
   {}
 
-
 public:
   /**
    * @brief Member function <b>version</b> returns the version number of the combined product.
@@ -96,7 +94,6 @@ public:
    * @brief Member function <b>setRegistryInvalid</b> marks th registry as contain a
    * conflict of some sort.  The <b>ERROR</b> attribute of each product describes
    * each error.
-   *
    */
   void setRegistryInvalid() {
     m_registryOK = false;
@@ -134,7 +131,6 @@ public:
 
   /**
    * @brief Member function <b>setProductName</b> sets the product name.
-   *
    */
   void setProductName(const std::string &product_name) {
     m_productName = product_name;
@@ -152,10 +148,6 @@ public:
   }
   ProductMap::iterator productMap_end() {
       return m_productMap.end();
-  }
-
-  size_t productMap_size() const {
-      return m_productMap.size();
   }
 
   /**
@@ -224,7 +216,6 @@ public:
    *
    * @return			a <b>std::string</b> const reference to the value of
    *				product's attribute.
-   *
    */
   std::string &getProductAttribute(const std::string &name, const std::string &attribute);
 

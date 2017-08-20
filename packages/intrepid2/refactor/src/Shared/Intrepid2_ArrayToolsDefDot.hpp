@@ -58,7 +58,7 @@ namespace Intrepid2 {
       leftInputViewType _leftInput;
       rightInputViewType _rightInput;
       const bool _hasField;
-      typedef typename leftInputViewType::value_type value_type;
+      typedef typename outputViewType::value_type value_type;
 
       KOKKOS_INLINE_FUNCTION
       F_dotMultiply(outputViewType output_,
@@ -70,7 +70,7 @@ namespace Intrepid2 {
 
       KOKKOS_INLINE_FUNCTION
       void operator()(const size_type iter) const {
-        size_type cl, bf, pt;
+        size_type cl(0), bf(0), pt(0);
         size_type leftRank(_leftInput.rank()), rightRank(_rightInput.rank());
 
         if (_hasField) 

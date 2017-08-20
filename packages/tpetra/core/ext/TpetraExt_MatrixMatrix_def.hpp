@@ -58,7 +58,7 @@
 #include "Teuchos_FancyOStream.hpp"
 
 
-#ifdef HAVE_TPETRAKERNELS_EXPERIMENTAL
+#ifdef HAVE_KOKKOSKERNELS_EXPERIMENTAL
 #include "KokkosKernels_SPGEMM.hpp"
 #endif
 
@@ -229,13 +229,13 @@ void Multiply(
 
   // Call the appropriate method to perform the actual multiplication.
   if (use_optimized_ATB) {
-    MMdetails::mult_AT_B_newmatrix(A, B, C, label);
+    MMdetails::mult_AT_B_newmatrix(A, B, C, label,params);
 
   } else if (call_FillComplete_on_result && newFlag) {
-    MMdetails::mult_A_B_newmatrix(Aview, Bview, C, label);
+    MMdetails::mult_A_B_newmatrix(Aview, Bview, C, label,params);
 
   } else if (call_FillComplete_on_result) {
-    MMdetails::mult_A_B_reuse(Aview, Bview, C, label);
+    MMdetails::mult_A_B_reuse(Aview, Bview, C, label,params);
 
   } else {
     // mfh 27 Sep 2016: Is this the "slow" case?  This
@@ -243,7 +243,7 @@ void Multiply(
     // thread-parallel inserts, but that may take some effort.
     CrsWrapper_CrsMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> crsmat(C);
 
-    MMdetails::mult_A_B(Aview, Bview, crsmat, label);
+    MMdetails::mult_A_B(Aview, Bview, crsmat, label,params);
 
 #ifdef HAVE_TPETRA_MMM_TIMINGS
     MM = rcp(new TimeMonitor(*TimeMonitor::getNewTimer(prefix_mmm + std::string("MMM All FillComplete"))));
@@ -347,9 +347,14 @@ void Jacobi(Scalar omega,
   MM = rcp(new TimeMonitor(*TimeMonitor::getNewTimer(prefix_mmm + std::string("Jacobi All I&X"))));
 #endif
 
+  // Enable globalConstants by default
+  // NOTE: the I&X routine sticks an importer on the paramlist as output, so we have to use a unique guy here
+  RCP<Teuchos::ParameterList> importParams1 = Teuchos::rcp(new Teuchos::ParameterList);
+  if(!params.is_null()) importParams1->set("compute global constants",params->get("compute global constants: temporaries",false));
+
   //Now import any needed remote rows and populate the Aview struct.
   RCP<const import_type> dummyImporter;
-  MMdetails::import_and_extract_views(*Aprime, targetMap_A, Aview, dummyImporter, false, label);
+  MMdetails::import_and_extract_views(*Aprime, targetMap_A, Aview, dummyImporter, false, label,importParams1);
 
   // We will also need local access to all rows of B that correspond to the
   // column-map of op(A).
@@ -357,7 +362,11 @@ void Jacobi(Scalar omega,
     targetMap_B = Aprime->getColMap();
 
   // Now import any needed remote rows and populate the Bview struct.
-  MMdetails::import_and_extract_views(*Bprime, targetMap_B, Bview, Aprime->getGraph()->getImporter(), false, label);
+  // Enable globalConstants by default
+  // NOTE: the I&X routine sticks an importer on the paramlist as output, so we have to use a unique guy here
+  RCP<Teuchos::ParameterList> importParams2 = Teuchos::rcp(new Teuchos::ParameterList);
+  if(!params.is_null()) importParams2->set("compute global constants",params->get("compute global constants: temporaries",false));
+  MMdetails::import_and_extract_views(*Bprime, targetMap_B, Bview, Aprime->getGraph()->getImporter(), false, label,importParams2);
 
 #ifdef HAVE_TPETRA_MMM_TIMINGS
   MM = rcp(new TimeMonitor(*TimeMonitor::getNewTimer(prefix_mmm + std::string("Jacobi All Multiply"))));
@@ -370,10 +379,10 @@ void Jacobi(Scalar omega,
   bool newFlag = !C.getGraph()->isLocallyIndexed() && !C.getGraph()->isGloballyIndexed();
 
   if (call_FillComplete_on_result && newFlag) {
-    MMdetails::jacobi_A_B_newmatrix(omega, Dinv, Aview, Bview, C, label);
+    MMdetails::jacobi_A_B_newmatrix(omega, Dinv, Aview, Bview, C, label, params);
 
   } else if (call_FillComplete_on_result) {
-    MMdetails::jacobi_A_B_reuse(omega, Dinv, Aview, Bview, C, label);
+    MMdetails::jacobi_A_B_reuse(omega, Dinv, Aview, Bview, C, label, params);
 
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::runtime_error, "jacobi_A_B_general not implemented");
@@ -971,8 +980,10 @@ void mult_AT_B_newmatrix(
   /*************************************************************/
   /* 1) Local Transpose of A                                   */
   /*************************************************************/
-  transposer_type transposer (rcpFromRef (A));
-  RCP<CrsMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> > Atrans = transposer.createTransposeLocal();
+  transposer_type transposer (rcpFromRef (A),label+std::string("XP: "));
+  RCP<Teuchos::ParameterList> transposeParams = Teuchos::rcp(new Teuchos::ParameterList);
+  if(!params.is_null()) transposeParams->set("compute global constants",params->get("compute global constants: temporaries",false));
+  RCP<CrsMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> > Atrans = transposer.createTransposeLocal(transposeParams);
 
   /*************************************************************/
   /* 2/3) Call mult_A_B_newmatrix w/ fillComplete              */
@@ -985,8 +996,15 @@ void mult_AT_B_newmatrix(
   crs_matrix_struct_type Aview;
   crs_matrix_struct_type Bview;
   RCP<const Import<LocalOrdinal,GlobalOrdinal, Node> > dummyImporter;
-  MMdetails::import_and_extract_views(*Atrans, Atrans->getRowMap(), Aview, dummyImporter,true, label);
-  MMdetails::import_and_extract_views(B, B.getRowMap(), Bview, dummyImporter,true, label);
+
+  // NOTE: the I&X routine sticks an importer on the paramlist as output, so we have to use a unique guy here
+  RCP<Teuchos::ParameterList> importParams1 = Teuchos::rcp(new Teuchos::ParameterList);
+  if(!params.is_null()) importParams1->set("compute global constants",params->get("compute global constants: temporaries",false));
+  MMdetails::import_and_extract_views(*Atrans, Atrans->getRowMap(), Aview, dummyImporter,true, label,importParams1);
+
+  RCP<Teuchos::ParameterList> importParams2 = Teuchos::rcp(new Teuchos::ParameterList);
+  if(!params.is_null()) importParams2->set("compute global constants",params->get("compute global constants: temporaries",false));
+  MMdetails::import_and_extract_views(B, B.getRowMap(), Bview, dummyImporter,true, label,importParams2);
 
 #ifdef HAVE_TPETRA_MMM_TIMINGS
   MM = rcp(new TimeMonitor(*TimeMonitor::getNewTimer(prefix_mmm + std::string("MMM-T AB-core"))));
@@ -1002,7 +1020,7 @@ void mult_AT_B_newmatrix(
     Ctemp = rcp(&C,false);// don't allow deallocation
 
   // Multiply
-  mult_A_B_newmatrix(Aview, Bview, *Ctemp, label);
+  mult_A_B_newmatrix(Aview, Bview, *Ctemp, label,params);
 
   /*************************************************************/
   /* 4) exportAndFillComplete matrix                           */
@@ -1015,6 +1033,8 @@ void mult_AT_B_newmatrix(
   if (needs_final_export) {
     Teuchos::ParameterList labelList;
     labelList.set("Timer Label", label);
+    if(!params.is_null()) labelList.set("compute global constants",params->get("compute global constants",true));
+
     Ctemp->exportAndFillComplete(Crcp,*Ctemp->getGraph()->getExporter(),
                                  B.getDomainMap(),A.getDomainMap(),rcp(&labelList,false));
   }
@@ -1141,7 +1161,7 @@ void mult_A_B(
 
     for (k = Arowptr[i]; k < Arowptr[i+1]; ++k) {
       LocalOrdinal Ak = Acol2Brow[Acolind[k]];
-      Scalar Aval = Avals[k];
+      const Scalar Aval = Avals[k];
       if (Aval == STS::zero())
         continue;
 
@@ -1182,7 +1202,7 @@ void mult_A_B(
 
     for (k = Arowptr[i]; k < Arowptr[i+1]; ++k) {
       LocalOrdinal Ak = Acol2Brow[Acolind[k]];
-      Scalar Aval = Avals[k];
+      const Scalar Aval = Avals[k];
       if (Aval == STS::zero())
         continue;
 
@@ -1255,9 +1275,9 @@ size_t C_estimate_nnz(CrsMatrixType & A, CrsMatrixType &B){
   // Follows the NZ estimate in ML's ml_matmatmult.c
   size_t Aest = 100, Best=100;
   if (A.getNodeNumEntries() > 0)
-    Aest = (A.getNodeNumRows() > 0)?  A.getNodeNumEntries()/A.getNodeNumEntries() : 100;
+    Aest = (A.getNodeNumRows() > 0)?  A.getNodeNumEntries()/A.getNodeNumRows() : 100;
   if (B.getNodeNumEntries() > 0)
-    Best = (B.getNodeNumRows() > 0) ? B.getNodeNumEntries()/B.getNodeNumEntries() : 100;
+    Best = (B.getNodeNumRows() > 0) ? B.getNodeNumEntries()/B.getNodeNumRows() : 100;
 
   size_t nnzperrow = (size_t)(sqrt((double)Aest) + sqrt((double)Best) - 1);
   nnzperrow *= nnzperrow;
@@ -1407,7 +1427,7 @@ void mult_A_B_newmatrix(
 
 
   // Call the actual kernel.  We'll rely on partial template specialization to call the correct one ---
-  // Either the straight-up Tpetra code (SerialNode) or the TpetraKernels one (other NGP node types)
+  // Either the straight-up Tpetra code (SerialNode) or the KokkosKernels one (other NGP node types)
   KernelWrappers<Scalar,LocalOrdinal,GlobalOrdinal,Node>::mult_A_B_newmatrix_kernel_wrapper(Aview,Bview,targetMapToOrigRow,targetMapToImportRow,Bcol2Ccol,Icol2Ccol,C,Cimport,label,params);
 
 }
@@ -1533,7 +1553,7 @@ void KernelWrappers<Scalar,LocalOrdinal,GlobalOrdinal,Node>::mult_A_B_newmatrix_
     // mfh 27 Sep 2016: For each entry of A in the current row of A
     for (size_t k = Arowptr[i]; k < Arowptr[i+1]; k++) {
       LO Aik  = Acolind[k]; // local column index of current entry of A
-      SC Aval = Avals[k];   // value of current entry of A
+      const SC Aval = Avals[k];   // value of current entry of A
       if (Aval == SC_ZERO)
         continue; // skip explicitly stored zero values in A
 
@@ -1634,14 +1654,18 @@ void KernelWrappers<Scalar,LocalOrdinal,GlobalOrdinal,Node>::mult_A_B_newmatrix_
   // Import object.  We should be able to do this without interfering
   // with the implementation of the local part of sparse matrix-matrix
   // multply above.
-  C.expertStaticFillComplete(Bview. origMatrix->getDomainMap(), Aview. origMatrix->getRangeMap(), Cimport);
+  RCP<Teuchos::ParameterList> labelList = rcp(new Teuchos::ParameterList);
+  labelList->set("Timer Label",label);
+  if(!params.is_null()) labelList->set("compute global constants",params->get("compute global constants",true));
+  RCP<const Export<LO,GO,NO> > dummyExport;
+  C.expertStaticFillComplete(Bview. origMatrix->getDomainMap(), Aview. origMatrix->getRangeMap(), Cimport,dummyExport,labelList);
 
 }
 
 
 /*********************************************************************************************************/
-// AB NewMatrix Kernel wrappers (TpetraKernels/OpenMP Version)
-#if defined(HAVE_TPETRAKERNELS_EXPERIMENTAL) && defined (HAVE_TPETRA_INST_OPENMP)
+// AB NewMatrix Kernel wrappers (KokkosKernels/OpenMP Version)
+#if defined(HAVE_KOKKOSKERNELS_EXPERIMENTAL) && defined (HAVE_TPETRA_INST_OPENMP)
 template<class Scalar,
            class LocalOrdinal,
            class GlobalOrdinal>
@@ -1682,7 +1706,7 @@ void KernelWrappers<Scalar,LocalOrdinal,GlobalOrdinal,Kokkos::Compat::KokkosOpen
 #endif
   //  printf("[%d] OpenMP kernel called\n",Aview.origMatrix->getRowMap()->getComm()->getRank());
 
-  // Node-specific code
+  // Node-specific code<
   typedef Kokkos::Compat::KokkosOpenMPWrapperNode Node;
   std::string nodename("OpenMP");
 
@@ -1694,7 +1718,7 @@ void KernelWrappers<Scalar,LocalOrdinal,GlobalOrdinal,Kokkos::Compat::KokkosOpen
   typedef typename graph_t::row_map_type::non_const_type lno_view_t;
   typedef typename graph_t::entries_type::non_const_type lno_nnz_view_t;
   typedef typename KCRS::values_type::non_const_type scalar_view_t;
-  typedef typename graph_t::row_map_type::const_type lno_view_t_const;
+  //typedef typename graph_t::row_map_type::const_type lno_view_t_const;
 
   // Options
   int team_work_size = 16;  // Defaults to 16 as per Deveci 12/7/16 - csiefer
@@ -1740,7 +1764,10 @@ void KernelWrappers<Scalar,LocalOrdinal,GlobalOrdinal,Kokkos::Compat::KokkosOpen
     const LocalOrdinal * Icol2Ccol_ptr = Icol2Ccol.getRawPtr();
 
     // Use a Kokkos::parallel_scan to build the rowptr
-    Kokkos::parallel_scan(merge_numrows,KOKKOS_LAMBDA(const size_t i, size_t & update, const bool final) {
+    typedef Node::execution_space execution_space;
+    typedef Kokkos::RangePolicy<execution_space, size_t> range_type;
+    Kokkos::parallel_scan (range_type (0, merge_numrows),
+      KOKKOS_LAMBDA (const size_t i, size_t& update, const bool final) {
         if(final) Mrowptr(i) = update;
 
         // Get the row count
@@ -1761,7 +1788,10 @@ void KernelWrappers<Scalar,LocalOrdinal,GlobalOrdinal,Kokkos::Compat::KokkosOpen
     scalar_view_t Mvalues("Mvals",merge_nnz);
 
     // Use a Kokkos::parallel_for to fill the rowptr/colind arrays
-    Kokkos::parallel_for(merge_numrows,KOKKOS_LAMBDA(const size_t i) {
+    typedef Node::execution_space execution_space;
+    typedef Kokkos::RangePolicy<execution_space, size_t> range_type;
+    Kokkos::parallel_for (range_type (0, merge_numrows),
+      KOKKOS_LAMBDA (const size_t i) {
         if(Acol2Brow_ptr[i]!=LO_INVALID) {
           size_t row   = Acol2Brow_ptr[i];
           size_t start = Bk.graph.row_map(row);
@@ -1827,7 +1857,10 @@ void KernelWrappers<Scalar,LocalOrdinal,GlobalOrdinal,Kokkos::Compat::KokkosOpen
 #endif
 
   // Final Fillcomplete
-  C.expertStaticFillComplete(Bview.origMatrix->getDomainMap(), Aview.origMatrix->getRangeMap(), Cimport);
+  RCP<Teuchos::ParameterList> labelList = rcp(new Teuchos::ParameterList);
+  labelList->set("Timer Label",label);
+  RCP<const Export<LocalOrdinal,GlobalOrdinal,Kokkos::Compat::KokkosOpenMPWrapperNode> > dummyExport;
+  C.expertStaticFillComplete(Bview.origMatrix->getDomainMap(), Aview.origMatrix->getRangeMap(), Cimport,dummyExport,labelList);
 
 #if 0
   {
@@ -1989,7 +2022,7 @@ void mult_A_B_reuse(
 
     for (size_t k = Arowptr[i]; k < Arowptr[i+1]; k++) {
       LO Aik  = Acolind[k];
-      SC Aval = Avals[k];
+      const SC Aval = Avals[k];
       if (Aval == SC_ZERO)
         continue;
 
@@ -2267,7 +2300,7 @@ void jacobi_A_B_newmatrix(
     // Entries of -omega * Dinv * A * B
     for (size_t k = Arowptr[i]; k < Arowptr[i+1]; k++) {
       LO Aik  = Acolind[k];
-      SC Aval = Avals[k];
+      const SC Aval = Avals[k];
       if (Aval == SC_ZERO)
         continue;
 
@@ -2356,8 +2389,12 @@ void jacobi_A_B_newmatrix(
   // lots of communication) by taking the previously constructed
   // Import object.  We should be able to do this without interfering
   // with the implementation of the local part of sparse matrix-matrix
-  // multply above.
-  C.expertStaticFillComplete(Bview.origMatrix->getDomainMap(), Aview.origMatrix->getRangeMap(), Cimport);
+  // multply above
+  RCP<Teuchos::ParameterList> labelList = rcp(new Teuchos::ParameterList);
+  labelList->set("Timer Label",label);
+  if(!params.is_null()) labelList->set("compute global constants",params->get("compute global constants",true));
+  RCP<const Export<LO,GO,NO> > dummyExport;
+  C.expertStaticFillComplete(Bview.origMatrix->getDomainMap(), Aview.origMatrix->getRangeMap(), Cimport,dummyExport,labelList);
 }
 
 
@@ -2516,7 +2553,7 @@ void jacobi_A_B_reuse(
     // Entries of -omega * Dinv * A * B
     for (size_t k = Arowptr[i]; k < Arowptr[i+1]; k++) {
       LO Aik  = Acolind[k];
-      SC Aval = Avals[k];
+      const SC Aval = Avals[k];
       if (Aval == SC_ZERO)
         continue;
 
@@ -2587,7 +2624,6 @@ void import_and_extract_views(
   using Teuchos::TimeMonitor;
   RCP<Teuchos::TimeMonitor> MM = rcp(new TimeMonitor(*TimeMonitor::getNewTimer(prefix_mmm + std::string("MMM I&X Alloc"))));
 #endif
-
   // The goal of this method is to populate the 'Aview' struct with views of the
   // rows of A, including all rows that correspond to elements in 'targetMap'.
   //
@@ -2702,6 +2738,9 @@ void import_and_extract_views(
     // Now create a new matrix into which we can import the remote rows of A that we need.
     Teuchos::ParameterList labelList;
     labelList.set("Timer Label", label);
+    // Minor speedup tweak - avoid computing the global constants
+    if(!params.is_null())
+      labelList.set("compute global constants", params->get("compute global constants",false));
     Aview.importMatrix = Tpetra::importAndFillCompleteCrsMatrix<crs_matrix_type>(rcpFromRef(A), *importer,
                                     A.getDomainMap(), importer->getTargetMap(), rcpFromRef(labelList));
 

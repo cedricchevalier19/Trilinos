@@ -86,13 +86,6 @@ namespace {
 
   std::string uppercase(const std::string &my_name);
 
-  template <typename T> void uniqify(std::vector<T> &container)
-  {
-    std::sort(container.begin(), container.end());
-    container.erase(std::unique(container.begin(), container.end()), container.end());
-    std::vector<T>(container).swap(container);
-  }
-
   void check_for_duplicate_names(const Ioss::Region *region, const Ioss::GroupingEntity *entity)
   {
     const std::string &name = entity->name();
@@ -125,6 +118,11 @@ namespace {
       }
     }
   }
+
+  bool is_input_or_appending_output(const Ioss::DatabaseIO *iodatabase)
+  {
+    return iodatabase->is_input() || iodatabase->open_create_behavior() == Ioss::DB_APPEND;
+  }
 } // namespace
 
 namespace Ioss {
@@ -149,15 +147,15 @@ namespace Ioss {
     iodatabase->set_region(this);
 
     if (iodatabase->usage() != Ioss::WRITE_HEARTBEAT &&
-        (iodatabase->is_input() || iodatabase->open_create_behavior() == Ioss::DB_APPEND)) {
+        (is_input_or_appending_output(iodatabase))) {
       // Read metadata -- populates GroupingEntity lists and transient data
-      Region::begin_mode(STATE_DEFINE_MODEL);
+      Region::begin_mode__(STATE_DEFINE_MODEL);
       iodatabase->read_meta_data();
       modelDefined     = true;
       transientDefined = true;
-      Region::end_mode(STATE_DEFINE_MODEL);
+      Region::end_mode__(STATE_DEFINE_MODEL);
       if (iodatabase->open_create_behavior() != Ioss::DB_APPEND) {
-        Region::begin_mode(STATE_READONLY);
+        Region::begin_mode__(STATE_READONLY);
       }
     }
 
@@ -185,8 +183,12 @@ namespace Ioss {
 
   Region::~Region()
   {
+    // Do anything to the database to make it consistent prior to closing and desctructing...
+    get_database()->finalize_database();
+
     // Region owns all sub-grouping entities it contains...
     try {
+      IOSS_FUNC_ENTER(m_);
       for (auto nb : nodeBlocks) {
         delete (nb);
       }
@@ -240,12 +242,14 @@ namespace Ioss {
 
   void Region::delete_database() { GroupingEntity::really_delete_database(); }
 
+  bool Region::node_major() const { return get_database()->node_major(); }
+
   MeshType Region::mesh_type() const
   {
     if (elementBlocks.empty() && structuredBlocks.empty()) {
-      return MeshType::UNKNOWN;
+      return MeshType::UNSTRUCTURED;
     }
-    else if (!elementBlocks.empty() && !structuredBlocks.empty()) {
+    if (!elementBlocks.empty() && !structuredBlocks.empty()) {
       return MeshType::HYBRID;
     }
     else if (!structuredBlocks.empty()) {
@@ -274,6 +278,7 @@ namespace Ioss {
    */
   void Region::output_summary(std::ostream &strm, bool do_transient)
   {
+    IOSS_FUNC_ENTER(m_);
     strm << "\n Database: " << get_database()->get_filename() << "\n";
     strm << "Mesh Type = " << mesh_type_string() << "\n";
     strm << "\n Number of coordinates per node   =" << std::setw(12)
@@ -321,7 +326,7 @@ namespace Ioss {
         for (auto block : blocks) {
           block->field_describe(Ioss::Field::TRANSIENT, &names);
         }
-        uniqify(names);
+	Ioss::Utils::uniquify(names);
         strm << " Number of element variables      =" << std::setw(12) << names.size() << "\n";
       }
 
@@ -331,7 +336,7 @@ namespace Ioss {
         for (auto block : blocks) {
           block->field_describe(Ioss::Field::TRANSIENT, &names);
         }
-        uniqify(names);
+	Ioss::Utils::uniquify(names);
         strm << " Number of structured block vars  =" << std::setw(12) << names.size() << "\n";
       }
 
@@ -341,7 +346,7 @@ namespace Ioss {
         for (auto block : blocks) {
           block->field_describe(Ioss::Field::TRANSIENT, &names);
         }
-        uniqify(names);
+	Ioss::Utils::uniquify(names);
         strm << " Number of nodeset variables      =" << std::setw(12) << names.size() << "\n";
       }
 
@@ -355,7 +360,7 @@ namespace Ioss {
           }
         }
 
-        uniqify(names);
+	Ioss::Utils::uniquify(names);
         strm << " Number of sideset variables      =" << std::setw(12) << names.size() << "\n";
       }
 
@@ -375,6 +380,12 @@ namespace Ioss {
    *
    */
   bool Region::begin_mode(State new_state)
+  {
+    IOSS_FUNC_ENTER(m_);
+    return begin_mode__(new_state);
+  }
+
+  bool Region::begin_mode__(State new_state)
   {
     bool success = false;
     if (new_state == STATE_CLOSED) {
@@ -412,7 +423,7 @@ namespace Ioss {
       DatabaseIO *db = get_database();
 
       if (new_state == STATE_DEFINE_TRANSIENT && db->usage() == Ioss::WRITE_HISTORY &&
-          !(db->is_input() || db->open_create_behavior() == Ioss::DB_APPEND)) {
+          !(is_input_or_appending_output(db))) {
         set_state(STATE_CLOSED);
         Ioss::Utils::generate_history_mesh(this);
         set_state(new_state);
@@ -432,9 +443,14 @@ namespace Ioss {
    */
   bool Region::end_mode(State current_state)
   {
+    IOSS_FUNC_ENTER(m_);
+    return end_mode__(current_state);
+  }
+
+  bool Region::end_mode__(State current_state)
+  {
     // Check that 'current_state' matches the current state of the
     // Region (that is, we are leaving the state we are in).
-
     if (get_state() != current_state) {
       std::ostringstream errmsg;
       errmsg << "ERROR: Specified end state does not match currently open state\n"
@@ -445,7 +461,7 @@ namespace Ioss {
     if (current_state == STATE_DEFINE_MODEL) {
       // Sort the element blocks based on the idOffset field, followed by
       // name...
-      if (!get_database()->is_input()) {
+      if (!is_input_or_appending_output(get_database())) {
         std::sort(elementBlocks.begin(), elementBlocks.end(), lessOffset);
         std::sort(faceBlocks.begin(), faceBlocks.end(), lessOffset);
         std::sort(edgeBlocks.begin(), edgeBlocks.end(), lessOffset);
@@ -484,7 +500,7 @@ namespace Ioss {
     DatabaseIO *db      = get_database();
     bool        success = db->end(current_state);
 
-    begin_mode(STATE_CLOSED);
+    begin_mode__(STATE_CLOSED);
 
     return success;
   }
@@ -499,16 +515,16 @@ namespace Ioss {
   int Region::add_state(double time)
   {
     static bool warning_output = false;
+    IOSS_FUNC_ENTER(m_);
 
     // NOTE:  For restart input databases, it is possible that the time
     //        is not monotonically increasing...
-    if (!get_database()->is_input() && !stateTimes.empty() &&
-        time <= stateTimes[stateTimes.size() - 1]) {
+    if (!get_database()->is_input() && !stateTimes.empty() && time <= stateTimes.back()) {
       // Check that time is increasing...
       if (!warning_output) {
         std::ostringstream errmsg;
         errmsg << "IOSS WARNING: Current time, " << time << ", is not greater than previous time, "
-               << stateTimes[stateTimes.size() - 1] << " in\n"
+               << stateTimes.back() << " in\n"
                << get_database()->get_filename()
                << ". This may cause problems in applications that assume "
                   "monotonically increasing time values.\n";
@@ -548,6 +564,7 @@ namespace Ioss {
    */
   double Region::get_state_time(int state) const
   {
+    IOSS_FUNC_ENTER(m_);
     double time = 0.0;
     if (state == -1) {
       if (get_database()->is_input() || get_database()->usage() == WRITE_RESULTS ||
@@ -599,6 +616,7 @@ namespace Ioss {
    */
   std::pair<int, double> Region::get_max_time() const
   {
+    IOSS_FUNC_ENTER(m_);
     if (!get_database()->is_input() && get_database()->usage() != WRITE_RESULTS &&
         get_database()->usage() != WRITE_RESTART) {
       return std::make_pair(currentState, stateTimes[0]);
@@ -631,6 +649,7 @@ namespace Ioss {
    */
   std::pair<int, double> Region::get_min_time() const
   {
+    IOSS_FUNC_ENTER(m_);
     if (!get_database()->is_input() && get_database()->usage() != WRITE_RESULTS &&
         get_database()->usage() != WRITE_RESTART) {
       return std::make_pair(currentState, stateTimes[0]);
@@ -661,6 +680,7 @@ namespace Ioss {
    */
   double Region::begin_state(int state)
   {
+    IOSS_FUNC_ENTER(m_);
     double time = 0.0;
     if (get_database()->is_input() && stateCount == 0) {
       std::ostringstream errmsg;
@@ -706,6 +726,7 @@ namespace Ioss {
    */
   double Region::end_state(int state)
   {
+    IOSS_FUNC_ENTER(m_);
     if (state != currentState) {
       std::ostringstream errmsg;
       errmsg << "ERROR: The current database state (" << currentState
@@ -737,12 +758,13 @@ namespace Ioss {
   bool Region::add(StructuredBlock *structured_block)
   {
     check_for_duplicate_names(this, structured_block);
+    IOSS_FUNC_ENTER(m_);
 
     // Check that region is in correct state for adding entities
     if (get_state() == STATE_DEFINE_MODEL) {
       structuredBlocks.push_back(structured_block);
       // Add name as alias to itself to simplify later uses...
-      add_alias(structured_block);
+      add_alias__(structured_block);
 
       return true;
     }
@@ -757,12 +779,13 @@ namespace Ioss {
   bool Region::add(NodeBlock *node_block)
   {
     check_for_duplicate_names(this, node_block);
+    IOSS_FUNC_ENTER(m_);
 
     // Check that region is in correct state for adding entities
     if (get_state() == STATE_DEFINE_MODEL) {
       nodeBlocks.push_back(node_block);
       // Add name as alias to itself to simplify later uses...
-      add_alias(node_block);
+      add_alias__(node_block);
 
       return true;
     }
@@ -776,6 +799,7 @@ namespace Ioss {
    */
   bool Region::add(const CoordinateFrame &frame)
   {
+    IOSS_FUNC_ENTER(m_);
     // Check that region is in correct state for adding entities
     if (get_state() == STATE_DEFINE_MODEL) {
       coordinateFrames.push_back(frame);
@@ -792,18 +816,19 @@ namespace Ioss {
   bool Region::add(ElementBlock *element_block)
   {
     check_for_duplicate_names(this, element_block);
+    IOSS_FUNC_ENTER(m_);
 
     // Check that region is in correct state for adding entities
     if (get_state() == STATE_DEFINE_MODEL) {
       // Add name as alias to itself to simplify later uses...
-      add_alias(element_block);
+      add_alias__(element_block);
 
       // An input database defines these in the order matching the order
       // on the "file".  For output, we need to order based on the
       // "original_block_order" property and calculate the offset at that
       // point.  This is done in "end".
 
-      if (get_database()->is_input()) {
+      if (is_input_or_appending_output(get_database())) {
         size_t  nblocks = elementBlocks.size();
         int64_t offset  = 0;
         if (nblocks > 0) {
@@ -844,18 +869,19 @@ namespace Ioss {
   bool Region::add(FaceBlock *face_block)
   {
     check_for_duplicate_names(this, face_block);
+    IOSS_FUNC_ENTER(m_);
 
     // Check that region is in correct state for adding entities
     if (get_state() == STATE_DEFINE_MODEL) {
       // Add name as alias to itself to simplify later uses...
-      add_alias(face_block);
+      add_alias__(face_block);
 
       // An input database defines these in the order matching the order
       // on the "file".  For output, we need to order based on the
       // "original_block_order" property and calculate the offset at that
       // point.  This is done in "end".
 
-      if (get_database()->is_input()) {
+      if (is_input_or_appending_output(get_database())) {
         size_t  nblocks = faceBlocks.size();
         int64_t offset  = 0;
         if (nblocks > 0) {
@@ -895,18 +921,19 @@ namespace Ioss {
   bool Region::add(EdgeBlock *edge_block)
   {
     check_for_duplicate_names(this, edge_block);
+    IOSS_FUNC_ENTER(m_);
 
     // Check that region is in correct state for adding entities
     if (get_state() == STATE_DEFINE_MODEL) {
       // Add name as alias to itself to simplify later uses...
-      add_alias(edge_block);
+      add_alias__(edge_block);
 
       // An input database defines these in the order matching the order
       // on the "file".  For output, we need to order based on the
       // "original_block_order" property and calculate the offset at that
       // point.  This is done in "end".
 
-      if (get_database()->is_input()) {
+      if (is_input_or_appending_output(get_database())) {
         size_t  nblocks = edgeBlocks.size();
         int64_t offset  = 0;
         if (nblocks > 0) {
@@ -946,10 +973,11 @@ namespace Ioss {
   bool Region::add(SideSet *sideset)
   {
     check_for_duplicate_names(this, sideset);
+    IOSS_FUNC_ENTER(m_);
     // Check that region is in correct state for adding entities
     if (get_state() == STATE_DEFINE_MODEL) {
       // Add name as alias to itself to simplify later uses...
-      add_alias(sideset);
+      add_alias__(sideset);
       sideSets.push_back(sideset);
       return true;
     }
@@ -964,10 +992,11 @@ namespace Ioss {
   bool Region::add(NodeSet *nodeset)
   {
     check_for_duplicate_names(this, nodeset);
+    IOSS_FUNC_ENTER(m_);
     // Check that region is in correct state for adding entities
     if (get_state() == STATE_DEFINE_MODEL) {
       // Add name as alias to itself to simplify later uses...
-      add_alias(nodeset);
+      add_alias__(nodeset);
       nodeSets.push_back(nodeset);
       return true;
     }
@@ -982,10 +1011,11 @@ namespace Ioss {
   bool Region::add(EdgeSet *edgeset)
   {
     check_for_duplicate_names(this, edgeset);
+    IOSS_FUNC_ENTER(m_);
     // Check that region is in correct state for adding entities
     if (get_state() == STATE_DEFINE_MODEL) {
       // Add name as alias to itself to simplify later uses...
-      add_alias(edgeset);
+      add_alias__(edgeset);
       edgeSets.push_back(edgeset);
       return true;
     }
@@ -1000,10 +1030,11 @@ namespace Ioss {
   bool Region::add(FaceSet *faceset)
   {
     check_for_duplicate_names(this, faceset);
+    IOSS_FUNC_ENTER(m_);
     // Check that region is in correct state for adding entities
     if (get_state() == STATE_DEFINE_MODEL) {
       // Add name as alias to itself to simplify later uses...
-      add_alias(faceset);
+      add_alias__(faceset);
       faceSets.push_back(faceset);
       return true;
     }
@@ -1018,10 +1049,11 @@ namespace Ioss {
   bool Region::add(ElementSet *elementset)
   {
     check_for_duplicate_names(this, elementset);
+    IOSS_FUNC_ENTER(m_);
     // Check that region is in correct state for adding entities
     if (get_state() == STATE_DEFINE_MODEL) {
       // Add name as alias to itself to simplify later uses...
-      add_alias(elementset);
+      add_alias__(elementset);
       elementSets.push_back(elementset);
       return true;
     }
@@ -1036,10 +1068,11 @@ namespace Ioss {
   bool Region::add(CommSet *commset)
   {
     check_for_duplicate_names(this, commset);
+    IOSS_FUNC_ENTER(m_);
     // Check that region is in correct state for adding entities
     if (get_state() == STATE_DEFINE_MODEL) {
       // Add name as alias to itself to simplify later uses...
-      add_alias(commset);
+      add_alias__(commset);
       commSets.push_back(commset);
       return true;
     }
@@ -1125,9 +1158,15 @@ namespace Ioss {
    */
   bool Region::add_alias(const GroupingEntity *ge)
   {
+    IOSS_FUNC_ENTER(m_);
+    return add_alias__(ge);
+  }
+
+  bool Region::add_alias__(const GroupingEntity *ge)
+  {
     // See if an entity with this name already exists...
     std::string db_name = ge->name();
-    std::string alias   = get_alias(db_name);
+    std::string alias   = get_alias__(db_name);
 
     if (!alias.empty()) {
       const GroupingEntity *old_ge = get_entity(db_name);
@@ -1153,13 +1192,13 @@ namespace Ioss {
         }
       }
     }
-    bool success = add_alias(db_name, db_name);
+    bool success = add_alias__(db_name, db_name);
 
     // "db_name" property is used with the canonical name setting.
     if (success && ge->property_exists("db_name")) {
       std::string canon_name = ge->get_property("db_name").get_string();
       if (canon_name != db_name) {
-        success = add_alias(db_name, canon_name);
+        success = add_alias__(db_name, canon_name);
       }
     }
 
@@ -1177,11 +1216,17 @@ namespace Ioss {
    */
   bool Region::add_alias(const std::string &db_name, const std::string &alias)
   {
+    IOSS_FUNC_ENTER(m_);
+    return add_alias__(db_name, alias);
+  }
+
+  bool Region::add_alias__(const std::string &db_name, const std::string &alias)
+  {
     // Possible that 'db_name' is itself an alias, resolve down to "canonical"
     // name...
     std::string canon = db_name;
     if (db_name != alias) {
-      canon = get_alias(db_name);
+      canon = get_alias__(db_name);
     }
 
     if (!canon.empty()) {
@@ -1197,7 +1242,6 @@ namespace Ioss {
     errmsg << "\n\nERROR: The entity named '" << db_name << "' which is being aliased to '" << alias
            << "' does not exist in region '" << name() << "'.\n";
     IOSS_ERROR(errmsg);
-    return false;
   }
 
   /** \brief Get the original name for an alias.
@@ -1206,6 +1250,12 @@ namespace Ioss {
    *  \returns The original name.
    */
   std::string Region::get_alias(const std::string &alias) const
+  {
+    IOSS_FUNC_ENTER(m_);
+    return get_alias__(alias);
+  }
+
+  std::string Region::get_alias__(const std::string &alias) const
   {
     std::string ci_alias = uppercase(alias);
     auto        I        = aliases_.find(ci_alias);
@@ -1225,6 +1275,7 @@ namespace Ioss {
    */
   int Region::get_aliases(const std::string &my_name, std::vector<std::string> &aliases) const
   {
+    IOSS_FUNC_ENTER(m_);
     size_t size = aliases.size();
     for (auto alias_pair : aliases_) {
       std::string alias = alias_pair.first;
@@ -1265,7 +1316,7 @@ namespace Ioss {
     if (io_type == EDGEBLOCK) {
       return get_edge_block(my_name);
     }
-    else if (io_type == SIDESET) {
+    if (io_type == SIDESET) {
       return get_sideset(my_name);
     }
     else if (io_type == NODESET) {
@@ -1360,7 +1411,8 @@ namespace Ioss {
    */
   NodeBlock *Region::get_node_block(const std::string &my_name) const
   {
-    const std::string db_name = get_alias(my_name);
+    IOSS_FUNC_ENTER(m_);
+    const std::string db_name = get_alias__(my_name);
     unsigned int      db_hash = Ioss::Utils::hash(db_name);
 
     NodeBlock *ge = nullptr;
@@ -1380,7 +1432,8 @@ namespace Ioss {
    */
   EdgeBlock *Region::get_edge_block(const std::string &my_name) const
   {
-    const std::string db_name = get_alias(my_name);
+    IOSS_FUNC_ENTER(m_);
+    const std::string db_name = get_alias__(my_name);
     unsigned int      db_hash = Ioss::Utils::hash(db_name);
 
     EdgeBlock *ge = nullptr;
@@ -1400,7 +1453,8 @@ namespace Ioss {
    */
   FaceBlock *Region::get_face_block(const std::string &my_name) const
   {
-    const std::string db_name = get_alias(my_name);
+    IOSS_FUNC_ENTER(m_);
+    const std::string db_name = get_alias__(my_name);
     unsigned int      db_hash = Ioss::Utils::hash(db_name);
 
     FaceBlock *ge = nullptr;
@@ -1420,7 +1474,8 @@ namespace Ioss {
    */
   ElementBlock *Region::get_element_block(const std::string &my_name) const
   {
-    const std::string db_name = get_alias(my_name);
+    IOSS_FUNC_ENTER(m_);
+    const std::string db_name = get_alias__(my_name);
     unsigned int      db_hash = Ioss::Utils::hash(db_name);
 
     ElementBlock *ge = nullptr;
@@ -1440,7 +1495,8 @@ namespace Ioss {
    */
   StructuredBlock *Region::get_structured_block(const std::string &my_name) const
   {
-    const std::string db_name = get_alias(my_name);
+    IOSS_FUNC_ENTER(m_);
+    const std::string db_name = get_alias__(my_name);
     unsigned int      db_hash = Ioss::Utils::hash(db_name);
 
     StructuredBlock *ge = nullptr;
@@ -1460,7 +1516,8 @@ namespace Ioss {
    */
   SideSet *Region::get_sideset(const std::string &my_name) const
   {
-    const std::string db_name = get_alias(my_name);
+    IOSS_FUNC_ENTER(m_);
+    const std::string db_name = get_alias__(my_name);
     unsigned int      db_hash = Ioss::Utils::hash(db_name);
 
     SideSet *ge = nullptr;
@@ -1480,6 +1537,7 @@ namespace Ioss {
    */
   SideBlock *Region::get_sideblock(const std::string &my_name) const
   {
+    IOSS_FUNC_ENTER(m_);
     SideBlock *ge = nullptr;
     for (auto ss : sideSets) {
       ge = ss->get_side_block(my_name);
@@ -1497,7 +1555,8 @@ namespace Ioss {
    */
   NodeSet *Region::get_nodeset(const std::string &my_name) const
   {
-    const std::string db_name = get_alias(my_name);
+    IOSS_FUNC_ENTER(m_);
+    const std::string db_name = get_alias__(my_name);
     unsigned int      db_hash = Ioss::Utils::hash(db_name);
 
     NodeSet *ge = nullptr;
@@ -1517,7 +1576,8 @@ namespace Ioss {
    */
   EdgeSet *Region::get_edgeset(const std::string &my_name) const
   {
-    const std::string db_name = get_alias(my_name);
+    IOSS_FUNC_ENTER(m_);
+    const std::string db_name = get_alias__(my_name);
     unsigned int      db_hash = Ioss::Utils::hash(db_name);
 
     EdgeSet *ge = nullptr;
@@ -1537,7 +1597,8 @@ namespace Ioss {
    */
   FaceSet *Region::get_faceset(const std::string &my_name) const
   {
-    const std::string db_name = get_alias(my_name);
+    IOSS_FUNC_ENTER(m_);
+    const std::string db_name = get_alias__(my_name);
     unsigned int      db_hash = Ioss::Utils::hash(db_name);
 
     FaceSet *ge = nullptr;
@@ -1557,7 +1618,8 @@ namespace Ioss {
    */
   ElementSet *Region::get_elementset(const std::string &my_name) const
   {
-    const std::string db_name = get_alias(my_name);
+    IOSS_FUNC_ENTER(m_);
+    const std::string db_name = get_alias__(my_name);
     unsigned int      db_hash = Ioss::Utils::hash(db_name);
 
     ElementSet *ge = nullptr;
@@ -1577,7 +1639,8 @@ namespace Ioss {
    */
   CommSet *Region::get_commset(const std::string &my_name) const
   {
-    const std::string db_name = get_alias(my_name);
+    IOSS_FUNC_ENTER(m_);
+    const std::string db_name = get_alias__(my_name);
     unsigned int      db_hash = Ioss::Utils::hash(db_name);
 
     CommSet *ge = nullptr;
@@ -1597,6 +1660,7 @@ namespace Ioss {
    */
   const CoordinateFrame &Region::get_coordinate_frame(int64_t id) const
   {
+    IOSS_FUNC_ENTER(m_);
     for (auto &coor_frame : coordinateFrames) {
       if (coor_frame.id() == id) {
         return coor_frame;
@@ -1646,7 +1710,7 @@ namespace Ioss {
       }
       return true;
     }
-    else if (((io_type & STRUCTUREDBLOCK) != 0u) && get_structured_block(my_name) != nullptr) {
+    if (((io_type & STRUCTUREDBLOCK) != 0u) && get_structured_block(my_name) != nullptr) {
       if (my_type != nullptr) {
         *my_type = "STRUCTURED_BLOCK";
       }
@@ -1702,6 +1766,7 @@ namespace Ioss {
    */
   ElementBlock *Region::get_element_block(size_t local_id) const
   {
+    IOSS_FUNC_ENTER(m_);
     for (auto eb : elementBlocks) {
       if (eb->contains(local_id)) {
         return eb;
@@ -1713,7 +1778,6 @@ namespace Ioss {
            << " is specified.  The valid range is 1 to "
            << get_implicit_property("element_count").get_int();
     IOSS_ERROR(errmsg);
-    return nullptr;
   }
 
   /** \brief Get the structured block containing a specified global-offset-node.
@@ -1724,6 +1788,7 @@ namespace Ioss {
    */
   StructuredBlock *Region::get_structured_block(size_t global_offset) const
   {
+    IOSS_FUNC_ENTER(m_);
     for (auto sb : structuredBlocks) {
       if (sb->contains(global_offset)) {
         return sb;
@@ -1734,7 +1799,6 @@ namespace Ioss {
     errmsg << "ERROR: In Ioss::Region::get_structured_block, an invalid global_offset of "
            << global_offset << " is specified.";
     IOSS_ERROR(errmsg);
-    return nullptr;
   }
 
   /** \brief Get an implicit property -- These are calcuated from data stored
@@ -1877,6 +1941,7 @@ namespace Ioss {
    */
   void Region::transfer_mesh_aliases(Region *to) const
   {
+    IOSS_FUNC_ENTER(m_);
     // Iterate through list, [ returns <alias, base_entity_name> ], if
     // 'base_entity_name' is defined on the restart file, add 'alias' as
     // an alias for it...
@@ -1884,7 +1949,7 @@ namespace Ioss {
       std::string alias = alias_pair.first;
       std::string base  = alias_pair.second;
       if (alias != base && to->get_entity(base) != nullptr) {
-        to->add_alias(base, alias);
+        to->add_alias__(base, alias);
       }
     }
   }
@@ -1929,6 +1994,7 @@ namespace Ioss {
    */
   void Region::synchronize_id_and_name(const Region *from, bool sync_attribute_field_names)
   {
+    IOSS_FUNC_ENTER(m_);
     for (auto alias_pair : aliases_) {
       std::string alias = alias_pair.first;
       std::string base  = alias_pair.second;
@@ -2046,7 +2112,7 @@ namespace Ioss {
       if (alias != base) {
         GroupingEntity *ge = get_entity(base);
         if (ge != nullptr) {
-          add_alias(base, alias);
+          add_alias__(base, alias);
         }
       }
     }

@@ -71,7 +71,12 @@ static string fnParams[NUMFN][3]={
 };
 
 // Value is a particular string
-#define NUMSTR 34
+#ifdef HAVE_ZOLTAN2_PULP
+#define NUMSTR 35
+#else
+#define NUMSTR 33
+#endif
+
 static string strParams[NUMSTR][3]={
   {"error_check_level", "basic_assertions", "invalid_assertion_request"},
   {"debug_level", "basic_status", "invalid_status"},
@@ -83,6 +88,7 @@ static string strParams[NUMSTR][3]={
   {"mj_parts", "2,3,4", "not_a_valid_list_of_any_type"},
   {"memory_procs", "2-10", "not_a_valid_list_of_any_type"},
   {"order_method", "rcm", "invalid_method"},
+  {"order_method_type", "local", "invalid_method_type"},
   {"order_package", "amd", "invalid_package"},
   {"partitioning_objective", "balance_object_weight", "invalid_objective"},
   {"partitioning_approach", "repartition", "invalid_approach"},
@@ -96,8 +102,10 @@ static string strParams[NUMSTR][3]={
   {"mapping_type", "0", "invalid_value"},                      // AnyNumberParameterEntryValidator
   {"imbalance_tolerance", "1.1", "invalid_option"},            // AnyNumberParameterEntryValidator
   {"mj_minimum_migration_imbalance", "1.1", "invalid_option"}, // AnyNumberParameterEntryValidator
+#ifdef HAVE_ZOLTAN2_PULP
   {"pulp_vert_imbalance", "1.1", "invalid_option"},            // AnyNumberParameterEntryValidator
   {"pulp_edge_imbalance", "1.1", "invalid_option"},            // AnyNumberParameterEntryValidator
+#endif // HAVE_ZOLTAN2_PULP
   {"scotch_imbalance_ratio", "1.1", "invalid_option"},         // AnyNumberParameterEntryValidator
   {"compute_metrics", "false", "invalid_bool_setting"},        // BoolParameterEntryValidator - accepts true/false/"true"/"false"
   {"rectilinear", "false", "invalid_bool_setting"},            // BoolParameterEntryValidator - accepts true/false/"true"/"false"

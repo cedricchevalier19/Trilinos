@@ -63,7 +63,7 @@ namespace Intrepid2 {
     KOKKOS_INLINE_FUNCTION
     void
     Basis_HGRAD_LINE_Cn_FEM_JACOBI::Serial<opType>::
-    getValues( /**/  outputViewType output,
+    getValues(       outputViewType output,
                const inputViewType  input,
                const ordinal_type   order,
                const double         alpha,
@@ -108,12 +108,12 @@ namespace Intrepid2 {
       case OPERATOR_Dn: {
         {
           const ordinal_type pend = output.dimension(0);
-          const ordinal_type jend = output.dimension(1);
-          const ordinal_type iend = output.dimension(2);
+          const ordinal_type iend = output.dimension(1);
+          const ordinal_type jend = output.dimension(2);
           
           for (ordinal_type p=0;p<pend;++p)
-            for (ordinal_type j=0;j<jend;++j)
-              for (ordinal_type i=0;i<iend;++i)
+            for (ordinal_type i=0;i<iend;++i)
+              for (ordinal_type j=0;j<jend;++j)
                 output(p, i, j) = 0.0;
         }
         {
@@ -148,7 +148,7 @@ namespace Intrepid2 {
              typename inputPointValueType,  class ...inputPointProperties>
     void 
     Basis_HGRAD_LINE_Cn_FEM_JACOBI::
-    getValues( /**/  Kokkos::DynRankView<outputValueValueType,outputValueProperties...> outputValues,
+    getValues(       Kokkos::DynRankView<outputValueValueType,outputValueProperties...> outputValues,
                const Kokkos::DynRankView<inputPointValueType, inputPointProperties...>  inputPoints,
                const ordinal_type order,
                const double alpha,

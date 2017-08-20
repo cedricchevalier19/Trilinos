@@ -44,6 +44,7 @@ Level 1
    aggregation: enable phase 3 = 1   [default]
    aggregation: preserve Dirichlet points = 0   [default]
    aggregation: allow user-specified singletons = 0   [default]
+   aggregation: error on nodes with no on-rank neighbors = 0   [default]
    OnePt aggregate map name =    [default]
    OnePt aggregate map factory =    [default]
    
@@ -52,14 +53,19 @@ Level 1
    Strided block id = -1   [default]
    Domain GID offsets = {0}   [default]
    
-  [empty list]
+  tentative: calculate qr = 1   [default]
+  matrixmatrix: kernel params -> 
+   [empty list]
   
  sa: damping factor = 1.33   [default]
  sa: calculate eigenvalue estimate = 0   [default]
  sa: eigenvalue estimate num iterations = 10   [default]
+ matrixmatrix: kernel params -> 
+  [empty list]
  
  Transpose P (MueLu::TransPFactory)
- [empty list]
+ matrixmatrix: kernel params -> 
+  [empty list]
  
  Computing Ac (MueLu::RAPFactory)
  transpose: use implicit = 0   [default]
@@ -114,6 +120,7 @@ Level 2
    aggregation: enable phase 3 = 1   [default]
    aggregation: preserve Dirichlet points = 0   [default]
    aggregation: allow user-specified singletons = 0   [default]
+   aggregation: error on nodes with no on-rank neighbors = 0   [default]
    OnePt aggregate map name =    [default]
    OnePt aggregate map factory =    [default]
    
@@ -122,14 +129,19 @@ Level 2
    Strided block id = -1   [default]
    Domain GID offsets = {0}   [default]
    
-  [empty list]
+  tentative: calculate qr = 1   [default]
+  matrixmatrix: kernel params -> 
+   [empty list]
   
  sa: damping factor = 1.33   [default]
  sa: calculate eigenvalue estimate = 0   [default]
  sa: eigenvalue estimate num iterations = 10   [default]
+ matrixmatrix: kernel params -> 
+  [empty list]
  
  Transpose P (MueLu::TransPFactory)
- [empty list]
+ matrixmatrix: kernel params -> 
+  [empty list]
  
  Computing Ac (MueLu::RAPFactory)
  transpose: use implicit = 0   [default]
@@ -184,6 +196,7 @@ Level 3
    aggregation: enable phase 3 = 1   [default]
    aggregation: preserve Dirichlet points = 0   [default]
    aggregation: allow user-specified singletons = 0   [default]
+   aggregation: error on nodes with no on-rank neighbors = 0   [default]
    OnePt aggregate map name =    [default]
    OnePt aggregate map factory =    [default]
    
@@ -195,14 +208,19 @@ Level 3
    Strided block id = -1   [default]
    Domain GID offsets = {0}   [default]
    
-  [empty list]
+  tentative: calculate qr = 1   [default]
+  matrixmatrix: kernel params -> 
+   [empty list]
   
  sa: damping factor = 1.33   [default]
  sa: calculate eigenvalue estimate = 0   [default]
  sa: eigenvalue estimate num iterations = 10   [default]
+ matrixmatrix: kernel params -> 
+  [empty list]
  
  Transpose P (MueLu::TransPFactory)
- [empty list]
+ matrixmatrix: kernel params -> 
+  [empty list]
  
  Computing Ac (MueLu::RAPFactory)
  transpose: use implicit = 0   [default]
@@ -225,6 +243,7 @@ Level 3
 --------------------------------------------------------------------------------
 Number of levels    = 4
 Operator complexity = 1.34
+Smoother complexity = 1.57
 Cycle type          = V
 
 level   rows    nnz  nnz/row  c ratio  procs

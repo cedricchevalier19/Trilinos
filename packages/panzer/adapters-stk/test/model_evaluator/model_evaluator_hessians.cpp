@@ -56,8 +56,6 @@ using Teuchos::rcp;
 #include "Thyra_LinearOpTester.hpp"
 #include "Thyra_DefaultScaledAdjointLinearOp.hpp"
 
-#include "Phalanx_KokkosUtilities.hpp"
-
 #include "Panzer_STK_Version.hpp"
 #include "PanzerAdaptersSTK_config.hpp"
 #include "Panzer_STK_Interface.hpp"
@@ -133,11 +131,9 @@ namespace panzer {
   // Testing Parameter Support
   TEUCHOS_UNIT_TEST(model_evaluator_hessians, d2g_dx2)
   {
-    typedef Thyra::ModelEvaluatorBase MEB;
     typedef panzer::Traits::RealType RealType;
     typedef Thyra::VectorBase<RealType> VectorType;
     typedef Thyra::SpmdVectorBase<RealType> SpmdVectorType;
-    typedef Thyra::LinearOpBase<RealType> OperatorType;
 
     using Teuchos::RCP;
     using Teuchos::rcp_dynamic_cast;
@@ -259,11 +255,9 @@ namespace panzer {
   // Testing Parameter Support
   TEUCHOS_UNIT_TEST(model_evaluator_hessians, d2g_dp2)
   {
-    typedef Thyra::ModelEvaluatorBase MEB;
     typedef panzer::Traits::RealType RealType;
     typedef Thyra::VectorBase<RealType> VectorType;
     typedef Thyra::SpmdVectorBase<RealType> SpmdVectorType;
-    typedef Thyra::LinearOpBase<RealType> OperatorType;
 
     using Teuchos::RCP;
     using Teuchos::rcp_dynamic_cast;
@@ -386,11 +380,9 @@ namespace panzer {
   // Testing Parameter Support
   TEUCHOS_UNIT_TEST(model_evaluator_hessians, d2g_dpdx)
   {
-    typedef Thyra::ModelEvaluatorBase MEB;
     typedef panzer::Traits::RealType RealType;
     typedef Thyra::VectorBase<RealType> VectorType;
     typedef Thyra::SpmdVectorBase<RealType> SpmdVectorType;
-    typedef Thyra::LinearOpBase<RealType> OperatorType;
 
     using Teuchos::RCP;
     using Teuchos::rcp_dynamic_cast;
@@ -513,11 +505,9 @@ namespace panzer {
   // Testing Parameter Support
   TEUCHOS_UNIT_TEST(model_evaluator_hessians, d2g_dxdp)
   {
-    typedef Thyra::ModelEvaluatorBase MEB;
     typedef panzer::Traits::RealType RealType;
     typedef Thyra::VectorBase<RealType> VectorType;
     typedef Thyra::SpmdVectorBase<RealType> SpmdVectorType;
-    typedef Thyra::LinearOpBase<RealType> OperatorType;
 
     using Teuchos::RCP;
     using Teuchos::rcp_dynamic_cast;
@@ -642,7 +632,6 @@ namespace panzer {
   {
     typedef panzer::Traits::RealType RealType;
     typedef Thyra::VectorBase<RealType> VectorType;
-    typedef Thyra::SpmdVectorBase<RealType> SpmdVectorType;
     typedef Thyra::LinearOpBase<RealType> OperatorType;
 
     using Teuchos::RCP;
@@ -744,7 +733,6 @@ namespace panzer {
   {
     typedef panzer::Traits::RealType RealType;
     typedef Thyra::VectorBase<RealType> VectorType;
-    typedef Thyra::SpmdVectorBase<RealType> SpmdVectorType;
     typedef Thyra::LinearOpBase<RealType> OperatorType;
 
     using Teuchos::RCP;
@@ -879,7 +867,6 @@ namespace panzer {
   {
     typedef panzer::Traits::RealType RealType;
     typedef Thyra::VectorBase<RealType> VectorType;
-    typedef Thyra::SpmdVectorBase<RealType> SpmdVectorType;
     typedef Thyra::LinearOpBase<RealType> OperatorType;
 
     using Teuchos::RCP;
@@ -983,7 +970,6 @@ namespace panzer {
   {
     typedef panzer::Traits::RealType RealType;
     typedef Thyra::VectorBase<RealType> VectorType;
-    typedef Thyra::SpmdVectorBase<RealType> SpmdVectorType;
     typedef Thyra::LinearOpBase<RealType> OperatorType;
 
     using Teuchos::RCP;
@@ -1213,7 +1199,11 @@ namespace panzer {
     Teuchos::RCP<panzer_stk::WorksetFactory> wkstFactory 
        = Teuchos::rcp(new panzer_stk::WorksetFactory(mesh)); // build STK workset factory
     Teuchos::RCP<panzer::WorksetContainer> wkstContainer     // attach it to a workset container (uses lazy evaluation)
-       = Teuchos::rcp(new panzer::WorksetContainer(wkstFactory,ap.physicsBlocks,workset_size));
+       = Teuchos::rcp(new panzer::WorksetContainer);
+    wkstContainer->setFactory(wkstFactory);
+    for(size_t i=0;i<ap.physicsBlocks.size();i++) 
+      wkstContainer->setNeeds(ap.physicsBlocks[i]->elementBlockID(),ap.physicsBlocks[i]->getWorksetNeeds());
+    wkstContainer->setWorksetSize(workset_size);
     ap.wkstContainer = wkstContainer;
 
     // build DOF Manager

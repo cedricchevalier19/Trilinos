@@ -2,9 +2,6 @@
 #define BALANCE_PRIVATEDECLARATIONS_HPP
 
 #include <stk_util/environment/ReportHandler.hpp>
-// stk search (order matters!)
-#include <stk_search/IdentProc.hpp>
-#include <stk_search/BoundingBox.hpp>
 
 #include <stk_mesh/base/GetEntities.hpp>
 #include "stk_mesh/base/FieldBase.hpp"  // for field_data
@@ -19,6 +16,7 @@
 
 #include <Teuchos_ParameterList.hpp>
 #include <stk_balance/internal/StkMeshAdapterForZoltan2.hpp>
+#include <stk_balance/internal/StkBalanceUtils.hpp>
 #include <Zoltan2_PartitioningProblem.hpp>
 #include <Zoltan2_ColoringProblem.hpp>
 
@@ -27,12 +25,6 @@
 #include <zoltan.h>
 
 #include <algorithm>
-
-typedef stk::search::IdentProc<stk::mesh::EntityId, int> StkMeshIdent;
-typedef std::vector<std::pair<StkMeshIdent, StkMeshIdent> > StkSearchResults;
-typedef std::pair<stk::search::Box<float>, StkMeshIdent> BoxWithStkId;
-typedef std::vector< BoxWithStkId > BoxVectorWithStkId;
-
 
 namespace stk
 {
@@ -50,12 +42,10 @@ void fillEntityCentroid(const stk::mesh::BulkData &stkMeshBulkData,  const stk::
 
 void addBoxForFace(stk::mesh::BulkData &stkMeshBulkData, stk::mesh::Entity face, const double eps, BoxVectorWithStkId &faceBoxes, const stk::mesh::FieldBase* coord);
 
-void fillFaceBoxesWithIds(stk::mesh::BulkData &stkMeshBulkData, const double eps, const stk::mesh::FieldBase* coord, BoxVectorWithStkId &faceBoxes, const stk::mesh::Selector& searchSelector);
-
 void createGraphEdgesUsingBBSearch(stk::mesh::BulkData& stkMeshBulkData, const BalanceSettings &balanceSettings,
                                    std::vector<GraphEdge>& graphEdges, const stk::mesh::Selector& searchSelector);
 
-void callZoltan2(const BalanceSettings& balanceSettings, const int num_procs_decomp, stk::mesh::EntityProcVec &decomp, stk::mesh::BulkData& stkMeshBulkData, const std::vector<stk::mesh::Selector>& selectors);
+void calculateGeometricOrGraphBasedDecomp(const BalanceSettings& balanceSettings, const int num_procs_decomp, stk::mesh::EntityProcVec &decomp, stk::mesh::BulkData& stkMeshBulkData, const std::vector<stk::mesh::Selector>& selectors);
 
 void rebalance(stk::mesh::BulkData& stkMeshBulkData, const stk::mesh::EntityProcVec& mockDecomposition);
 void rebalance(stk::mesh::BulkData& stkMeshBulkData, const std::vector<unsigned>& mappings, const stk::mesh::EntityProcVec& mockDecomposition);
@@ -63,8 +53,9 @@ void rebalance(DecompositionChangeList &changeList);
 
 void logMessage(MPI_Comm communicator, const std::string &message);
 
-void fill_zoltan2_graph(const BalanceSettings& balanceSettings, stk::mesh::BulkData& stkMeshBulkData, Zoltan2ParallelGraph& zoltan2Graph,
-                        const stk::mesh::Selector& searchSelector, const stk::mesh::impl::LocalIdMapper& localIds);
+void createZoltanParallelGraph(const BalanceSettings& balanceSettings, stk::mesh::BulkData& stkMeshBulkData,
+                               const std::vector<stk::mesh::Selector>& selectors, const stk::mesh::impl::LocalIdMapper& localIds,
+                               Zoltan2ParallelGraph& zoltan2Graph);
 
 void add_connected_entities_of_rank(stk::mesh::BulkData& stkMeshBulkData, stk::mesh::Entity element, int newOwningProc, stk::mesh::EntityRank rank, std::vector<std::pair<stk::mesh::Entity, int> > &entityProcPairs);
 
@@ -109,7 +100,7 @@ template <class ZoltanAdapter>
 void print_statistics(const ZoltanAdapter& stkMeshAdapter, int parallel_rank )
 {
     //KDD Expect this interface to change -- I promise!!!
-    Teuchos::RCP<const Teuchos::Comm<int> > comm = Teuchos::DefaultComm<int>::getComm(); // This should be our stkMeshBulkData.parallel()
+    auto comm = Teuchos::DefaultComm<int>::getComm(); // This should be our stkMeshBulkData.parallel()
     Teuchos::ParameterList pl;
     Zoltan2::EvaluatePartition<ZoltanAdapter> ep(&stkMeshAdapter, &pl, comm, nullptr);
     print_zoltan_statistics(stkMeshAdapter, ep, parallel_rank);
@@ -119,7 +110,7 @@ template <class ZoltanAdapter>
 void print_solution_statistics(const ZoltanAdapter& stkMeshAdapter, const Zoltan2::PartitioningSolution<ZoltanAdapter>& solution, int parallel_rank )
 {
     //KDD Expect this interface to change -- I promise!!!
-    Teuchos::RCP<const Teuchos::Comm<int> > comm = Teuchos::DefaultComm<int>::getComm(); // This should be our stkMeshBulkData.parallel()
+    auto comm = Teuchos::DefaultComm<int>::getComm(); // This should be our stkMeshBulkData.parallel()
     Teuchos::ParameterList pl;
     Zoltan2::EvaluatePartition<ZoltanAdapter> ep(&stkMeshAdapter, &pl, comm, &solution);
     print_zoltan_statistics(stkMeshAdapter, ep, parallel_rank);

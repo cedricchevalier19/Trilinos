@@ -44,7 +44,7 @@
 #define __Panzer_DOFManager_hpp__
 #include <map>
 
-#include "mpi.h"
+#include <mpi.h>
 
 #include "PanzerDofMgr_config.hpp"
 #include "Panzer_FieldPattern.hpp"
@@ -365,7 +365,7 @@ protected:
   bool buildConnectivityRun_;
 
   bool requireOrientations_;
-  std::vector<std::vector<char> > orientation_;
+  std::vector<std::vector<signed char> > orientation_;
 
   bool useTieBreak_;
   bool useNeighbors_;

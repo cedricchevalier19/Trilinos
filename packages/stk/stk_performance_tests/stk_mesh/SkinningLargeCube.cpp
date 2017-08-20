@@ -40,7 +40,7 @@
 #include <stk_util/parallel/ParallelReduce.hpp>
 #include <stk_util/environment/perf_util.hpp>
 
-#include <stk_mesh/fixtures/HexFixture.hpp>
+#include <stk_unit_tests/stk_mesh_fixtures/HexFixture.hpp>
 #include <stk_mesh/base/BulkModification.hpp>
 #include <stk_mesh/base/MetaData.hpp>
 #include <stk_mesh/base/BulkData.hpp>
@@ -290,7 +290,7 @@ void communicate_and_create_shared_nodes( stk::mesh::BulkData & mesh,
       stk::mesh::Entity old_entity = mesh.get_entity(old_key);
 
       EXPECT_EQ(stk::topology::NODE_RANK, new_key.rank());
-      stk::mesh::Entity new_entity = mesh.declare_entity(new_key.rank(), new_key.id(), no_parts);
+      stk::mesh::Entity new_entity = mesh.declare_node(new_key.id(), no_parts);
 
       nodes.push_back(old_entity);
       new_nodes.push_back(new_entity);

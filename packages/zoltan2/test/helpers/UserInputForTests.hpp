@@ -319,6 +319,7 @@ private:
 
   // Modify the Maps of an input matrix to make them non-contiguous 
   RCP<tcrsMatrix_t> modifyMatrixGIDs(RCP<tcrsMatrix_t> &in);
+  inline zgno_t newID(const zgno_t id) { return id * 2 + 10001; }
 
   // Read Zoltan data that is in a .graph file.
   void getUIChacoGraph(FILE *fptr, bool haveAssign, FILE *assignFile,
@@ -1042,13 +1043,14 @@ RCP<tcrsMatrix_t> UserInputForTests::modifyMatrixGIDs(
   auto inRows = inMap->getMyGlobalIndices();
   Teuchos::Array<zgno_t> outRows(nRows);
   for (size_t i = 0; i < nRows; i++) {
-    outRows[i] = inRows[i] * 2 + 1;
+    outRows[i] = newID(inRows[i]);
   }
 
   Tpetra::global_size_t nGlobalRows = inMap->getGlobalNumElements();
   RCP<map_t> outMap = rcp(new map_t(nGlobalRows, outRows(), 0,
                                     inMap->getComm()));
 
+#ifdef INCLUDE_LENGTHY_OUTPUT
   // Sanity check output
   {
     std::cout << inMap->getComm()->getRank() << " KDDKDD "
@@ -1063,6 +1065,7 @@ RCP<tcrsMatrix_t> UserInputForTests::modifyMatrixGIDs(
                 << outMap->getMyGlobalIndices()[i] << ") ";
     std::cout << std::endl;
   }
+#endif // INCLUDE_LENGTHY_OUTPUT
 
   // Create a new matrix using the new map
   // Get the length of the longest row; allocate memory.
@@ -1077,7 +1080,7 @@ RCP<tcrsMatrix_t> UserInputForTests::modifyMatrixGIDs(
     zgno_t inGid = inMap->getGlobalElement(i);
     inMatrix->getGlobalRowCopy(inGid, indices, values, nEntries);
     for (size_t j = 0; j < nEntries; j++)
-      indices[j] = indices[j] * 2 + 1;
+      indices[j] = newID(indices[j]);
 
     zgno_t outGid = outMap->getGlobalElement(i);
     outMatrix->insertGlobalValues(outGid, indices(0, nEntries),
@@ -1085,6 +1088,7 @@ RCP<tcrsMatrix_t> UserInputForTests::modifyMatrixGIDs(
   }
   outMatrix->fillComplete();
 
+#ifdef INCLUDE_LENGTHY_OUTPUT
   // Sanity check output
   {
     std::cout << inMap->getComm()->getRank() << " KDDKDD Rows "
@@ -1116,6 +1120,7 @@ RCP<tcrsMatrix_t> UserInputForTests::modifyMatrixGIDs(
       std::cout << std::endl;
     }
   }
+#endif // INCLUDE_LENGTHY_OUTPUT
 
   return outMatrix;
 }
@@ -1146,7 +1151,7 @@ void UserInputForTests::readMatrixMarketFile(
                                              true, false, false);
 #ifdef KDD_NOT_READY_YET
     // See note below about modifying coordinate IDs as well.
-    if (makeNonContiguous)
+    //if (makeNonContiguous)
       fromMatrix = modifyMatrixGIDs(fromMatrix);
 #endif
 
@@ -1181,8 +1186,12 @@ void UserInputForTests::readMatrixMarketFile(
                       "UserInputForTests unable to read matrix market file");
 
   M_ = toMatrix;
-  std::cout << tcomm_->getRank() << " KDDKDD " << M_->getNodeNumRows() << " " << M_->getGlobalNumRows()
-            << " " << M_->getNodeNumEntries() << " " << M_->getGlobalNumEntries() << std::endl;
+#ifdef INCLUDE_LENGTHY_OUTPUT
+  std::cout << tcomm_->getRank() << " KDDKDD " << M_->getNodeNumRows() 
+            << " " << M_->getGlobalNumRows()
+            << " " << M_->getNodeNumEntries() 
+            << " " << M_->getGlobalNumEntries() << std::endl;
+#endif // INCLUDE_LENGTHY_OUTPUT
 
   xM_ = Zoltan2::XpetraTraits<tcrsMatrix_t>::convertToXpetra(M_);
 
@@ -1331,10 +1340,13 @@ void UserInputForTests::readMatrixMarketFile(
     ArrayRCP<const zgno_t> rowIds = Teuchos::arcp(tmp, 0, numGlobalCoords);
 
 #ifdef KDD_NOT_READY_YET
-    // TODO if do modifyMatrixGIDs, I think we need to modify ids here as well
-#endif
+    // TODO if modifyMatrixGIDs, we need to modify ids here as well
+    for (zgno_t id=0; id < zgno_t(numGlobalCoords); id++)
+      *tmp++ = newID(id);
+#else
     for (zgno_t id=0; id < zgno_t(numGlobalCoords); id++)
       *tmp++ = id;
+#endif
 
     RCP<const map_t> fromMap = rcp(new map_t(numGlobalCoords,
                                              rowIds.view(0, numGlobalCoords),
@@ -2685,14 +2697,14 @@ void UserInputForTests::readPamgenMeshFile(string path, string testData)
     return;
   }
 
-  char * file_data = new char[len];
-  file_data[len-1] = '\0'; // critical to null terminate buffer // MDM added -1 as this was a buffer overwrite
+  char * file_data = new char[len+1];
+  file_data[len] = '\0'; // critical to null terminate buffer 
   if(rank == 0){
     file.read(file_data,len); // if proc 0 then read file
   }
 
   // broadcast the file to the world
-  this->tcomm_->broadcast(0,(int)len,file_data);
+  this->tcomm_->broadcast(0,(int)len+1,file_data);
   this->tcomm_->barrier();
 
   // Create the PamgenMesh

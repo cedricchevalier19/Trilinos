@@ -117,13 +117,15 @@ namespace Intrepid2 {
 
     class Basis_HCURL_HEX_I1_FEM {
     public:
+      typedef struct Hexahedron<8> cell_topology_type;
+
       template<EOperator opType>
       struct Serial {
         template<typename outputViewType,
                  typename inputViewType>
         KOKKOS_INLINE_FUNCTION
         static void
-        getValues( /**/  outputViewType output,
+        getValues(       outputViewType output,
                    const inputViewType  input );
       };
 
@@ -131,7 +133,7 @@ namespace Intrepid2 {
                typename outputValueValueType, class ...outputValueProperties,
                typename inputPointValueType,  class ...inputPointProperties>
       static void
-      getValues( /**/  Kokkos::DynRankView<outputValueValueType,outputValueProperties...> outputValues,
+      getValues(       Kokkos::DynRankView<outputValueValueType,outputValueProperties...> outputValues,
                  const Kokkos::DynRankView<inputPointValueType, inputPointProperties...>  inputPoints,
                  const EOperator operatorType);
 
@@ -139,7 +141,7 @@ namespace Intrepid2 {
                typename inputPointViewType,
                EOperator opType>
       struct Functor {
-        /**/  outputValueViewType _outputValues;
+              outputValueViewType _outputValues;
         const inputPointViewType  _inputPoints;
 
         KOKKOS_INLINE_FUNCTION
@@ -190,7 +192,7 @@ namespace Intrepid2 {
 
     virtual
     void
-    getValues( /**/  outputViewType outputValues,
+    getValues(       outputViewType outputValues,
                const pointViewType  inputPoints,
                const EOperator operatorType = OPERATOR_VALUE ) const {
 #ifdef HAVE_INTREPID2_DEBUG

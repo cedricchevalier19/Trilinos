@@ -59,30 +59,6 @@ void process_nodesets(Ioss::Region &region, stk::mesh::MetaData &meta)
   const Ioss::NodeSetContainer& node_sets = region.get_nodesets();
   stk::io::default_part_processing(node_sets, meta);
 
-  stk::mesh::Field<double> & distribution_factors_field =
-    meta.declare_field<stk::mesh::Field<double> >(stk::topology::NODE_RANK, "distribution_factors");
-  stk::io::set_field_role(distribution_factors_field, Ioss::Field::MESH);
-
-  /** \todo REFACTOR How to associate distribution_factors field
-   * with the nodeset part if a node is a member of multiple
-   * nodesets
-   */
-
-  for(Ioss::NodeSetContainer::const_iterator it = node_sets.begin();
-      it != node_sets.end(); ++it) {
-    Ioss::NodeSet *entity = *it;
-
-    if (stk::io::include_entity(entity)) {
-      stk::mesh::Part* const part = meta.get_part(entity->name());
-
-      STKIORequire(part != NULL);
-      STKIORequire(entity->field_exists("distribution_factors"));
-
-      stk::io::set_field_role(distribution_factors_field, Ioss::Field::MESH);
-      stk::mesh::put_field(distribution_factors_field, *part);
-    }
-  }
-
   for(Ioss::NodeSetContainer::const_iterator it = node_sets.begin();
       it != node_sets.end(); ++it) {
     Ioss::NodeSet *entity = *it;
@@ -208,7 +184,7 @@ void process_surface_entity(const Ioss::SideSet* sset, stk::mesh::BulkData & bul
                 if (bulk.is_valid(elem)) {
                     // Ioss uses 1-based side ordinal, stk::mesh uses 0-based.
                     int side_ordinal = elem_side[is*2+1] - 1;
-                    stk::mesh::EntityId side_id_for_classic_behavior = stk::mesh::impl::side_id_formula(elem_side[is*2], elem_side[is*2+1]);
+                    stk::mesh::EntityId side_id_for_classic_behavior = stk::mesh::impl::side_id_formula(elem_side[is*2], side_ordinal);
 
                     if (par_dimen == 1) {
                         if(bulk.mesh_meta_data().spatial_dimension()==2 && behavior == stk::io::StkMeshIoBroker::STK_IO_SIDE_CREATION_USING_GRAPH_TEST)
@@ -223,8 +199,7 @@ void process_surface_entity(const Ioss::SideSet* sset, stk::mesh::BulkData & bul
                     }
                     else if (par_dimen == 2) {
                         if (behavior == stk::io::StkMeshIoBroker::STK_IO_SIDESET_FACE_CREATION_CLASSIC) {
-                            stk::mesh::Entity side = stk::mesh::declare_element_side(bulk, side_id_for_classic_behavior, elem, side_ordinal);
-                            bulk.change_entity_parts( side, add_parts );
+                            bulk.declare_element_side(elem, side_ordinal, add_parts);
                         }
                         else if (behavior == stk::io::StkMeshIoBroker::STK_IO_SIDESET_FACE_CREATION_CURRENT) {
                             stk::mesh::Entity new_face = stk::mesh::impl::get_or_create_face_at_element_side(bulk,elem,side_ordinal,side_id_for_classic_behavior,stk::mesh::PartVector(1,sb_part));
@@ -269,8 +244,8 @@ void send_element_side_to_element_owner(stk::CommSparse &comm,
         const stk::mesh::EntityIdProcMap::const_iterator iter = elemIdMovedToProc.find(sideToMove.elem);
         ThrowRequireWithSierraHelpMsg(iter!=elemIdMovedToProc.end());
         int destProc = iter->second;
-        comm.send_buffer(destProc).pack<stk::mesh::EntityId>(sideToMove.elem);
-        comm.send_buffer(destProc).pack<unsigned>(sideToMove.sideOrdinal);
+        comm.send_buffer(destProc).pack(sideToMove.elem);
+        comm.send_buffer(destProc).pack(sideToMove.sideOrdinal);
         pack_vector_to_proc(comm, sideToMove.partOrdinals, destProc);
     }
 }
@@ -279,8 +254,8 @@ void unpack_and_declare_element_side(stk::CommSparse & comm, stk::mesh::BulkData
 {
     stk::mesh::EntityId elemId;
     unsigned sideOrdinal;
-    comm.recv_buffer(procId).unpack<stk::mesh::EntityId>(elemId);
-    comm.recv_buffer(procId).unpack<unsigned>(sideOrdinal);
+    comm.recv_buffer(procId).unpack(elemId);
+    comm.recv_buffer(procId).unpack(sideOrdinal);
     stk::mesh::OrdinalVector partOrdinals;
     unpack_vector_from_proc(comm, partOrdinals, procId);
 

@@ -62,6 +62,7 @@ TRIBITS_REPOSITORY_DEFINE_PACKAGES(
   ThreadPool            packages/ThreadPool               PT # Depends on Pthreads
   Kokkos                packages/kokkos                   PT
   Teuchos               packages/teuchos                  PT
+  KokkosKernels         packages/kokkos-kernels           PT
   RTOp                  packages/rtop                     PT
   Sacado                packages/sacado                   PT
   MiniTensor            packages/minitensor               PT
@@ -120,7 +121,7 @@ TRIBITS_REPOSITORY_DEFINE_PACKAGES(
   Moertel               packages/moertel                  ST
   MueLu                 packages/muelu                    PT
   Rythmos               packages/rythmos                  PT
-  Tempus                tempus                            ST
+  Tempus                packages/tempus                   PT
   MOOCHO                packages/moocho                   ST
   Stokhos               packages/stokhos                  PT
   ROL                   packages/rol                      PT
@@ -155,7 +156,6 @@ TRIBITS_ALLOW_MISSING_EXTERNAL_PACKAGES(SCORECapf_stk)
 TRIBITS_ALLOW_MISSING_EXTERNAL_PACKAGES(SCORECapf_zoltan)
 TRIBITS_ALLOW_MISSING_EXTERNAL_PACKAGES(SCORECma)
 TRIBITS_ALLOW_MISSING_EXTERNAL_PACKAGES(SCORECpumi)
-TRIBITS_ALLOW_MISSING_EXTERNAL_PACKAGES(Tempus)
 TRIBITS_ALLOW_MISSING_EXTERNAL_PACKAGES(MOOCHO)
 TRIBITS_ALLOW_MISSING_EXTERNAL_PACKAGES(Sundance)
 TRIBITS_ALLOW_MISSING_EXTERNAL_PACKAGES(CTrilinos)

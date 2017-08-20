@@ -121,14 +121,10 @@ void
 BlockRelaxation<MatrixType,ContainerType>::
 setParameters (const Teuchos::ParameterList& List)
 {
-  //Teuchos::ParameterList validparams;
-  //Ifpack2::getValidParameters (validparams);
-  //List.validateParameters (validparams);
-
-  // Don't change ANY parameter unless the user specified it
-  // explicitly, thus indicating that the user wants to change it.
-  // This avoids the (not really sensible) defaults in
-  // Ifpack2::getValidParameters.
+  // Note that the validation process does not change List.
+  Teuchos::ParameterList validparams;
+  Ifpack2::getValidParameters (validparams);
+  List.validateParameters (validparams);
 
   if (List.isParameter ("relaxation: container")) {
     // If the container type isn't a string, this will throw, but it
@@ -357,6 +353,22 @@ BlockRelaxation<MatrixType,ContainerType>::
 getApplyTime () const
 {
   return ApplyTime_;
+}
+
+
+template<class MatrixType,class ContainerType>
+size_t BlockRelaxation<MatrixType,ContainerType>::getNodeSmootherComplexity() const {
+  TEUCHOS_TEST_FOR_EXCEPTION(
+    A_.is_null (), std::runtime_error, "Ifpack2::BlockRelaxation::getNodeSmootherComplexity: "
+    "The input matrix A is null.  Please call setMatrix() with a nonnull "
+    "input matrix, then call compute(), before calling this method.");
+  // Relaxation methods cost roughly one apply + one block-diagonal inverse per iteration
+  // NOTE: This approximates all blocks as dense, which may overstate the cost if you have a sparse (or banded) container.
+  size_t block_nnz = 0;
+  for (local_ordinal_type i = 0; i < NumLocalBlocks_; ++i) 
+    block_nnz += Partitioner_->numRowsInPart(i) *Partitioner_->numRowsInPart(i);
+    
+  return block_nnz + A_->getNodeNumEntries();
 }
 
 template<class MatrixType,class ContainerType>
@@ -888,8 +900,13 @@ description () const
     out << "INVALID";
   }
 
+  out << ", overlap: " << OverlapLevel_;
+
   out  << ", " << "sweeps: " << NumSweeps_ << ", "
       << "damping factor: " << DampingFactor_ << ", ";
+
+  std::string containerType = ContainerType::getName();
+  out << "block container: " << ((containerType == "Generic") ? containerType_ : containerType);
 
   out << "}";
   return out.str();

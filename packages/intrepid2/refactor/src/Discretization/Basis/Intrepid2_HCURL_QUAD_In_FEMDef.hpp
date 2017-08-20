@@ -62,9 +62,9 @@ namespace Intrepid2 {
     KOKKOS_INLINE_FUNCTION
     void
     Basis_HCURL_QUAD_In_FEM::Serial<opType>::
-    getValues( /**/  outputViewType output,
+    getValues(       outputViewType output,
                const inputViewType  input,
-               /**/  workViewType   work,
+                     workViewType   work,
                const vinvViewType   vinvLine,
                const vinvViewType   vinvBubble) {
       const ordinal_type cardLine = vinvLine.dimension(0);
@@ -208,7 +208,7 @@ namespace Intrepid2 {
              typename vinvValueType,        class ...vinvProperties>
     void
     Basis_HCURL_QUAD_In_FEM::
-    getValues( /**/  Kokkos::DynRankView<outputValueValueType,outputValueProperties...> outputValues,
+    getValues(       Kokkos::DynRankView<outputValueValueType,outputValueProperties...> outputValues,
                const Kokkos::DynRankView<inputPointValueType, inputPointProperties...>  inputPoints,
                const Kokkos::DynRankView<vinvValueType,       vinvProperties...>        vinvLine,
                const Kokkos::DynRankView<vinvValueType,       vinvProperties...>        vinvBubble,
@@ -238,8 +238,10 @@ namespace Intrepid2 {
         break;
       }
       default: {
-        INTREPID2_TEST_FOR_EXCEPTION( true , std::invalid_argument,
-                                      ">>> ERROR (Basis_HCURL_QUAD_In_FEM): Operator type not implemented" );
+        // INTREPID2_TEST_FOR_EXCEPTION( true , std::invalid_argument,
+        //                               ">>> ERROR (Basis_HCURL_QUAD_In_FEM): Operator type not implemented" );
+        INTREPID2_TEST_FOR_WARNING( true , 
+                                    ">>> ERROR (Basis_HCURL_QUAD_In_FEM): Operator type not implemented" );
         break;
       }
       }
@@ -286,7 +288,8 @@ namespace Intrepid2 {
       
       // An array with local DoF tags assigned to the basis functions, in the order of their local enumeration 
       constexpr ordinal_type maxCardLine = Parameters::MaxOrder + 1;
-      ordinal_type tags[2*maxCardLine*maxCardLine][4];
+      constexpr ordinal_type maxCardBubble = Parameters::MaxOrder;
+      ordinal_type tags[2*maxCardLine*maxCardBubble][4];
 
       const ordinal_type edge_x[2] = {0,2}; 
       const ordinal_type edge_y[2] = {3,1}; 

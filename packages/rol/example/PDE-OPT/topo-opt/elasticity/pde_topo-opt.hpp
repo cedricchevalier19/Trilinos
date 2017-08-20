@@ -51,6 +51,11 @@
 
 #include "../../TOOLS/pde.hpp"
 #include "../../TOOLS/fe.hpp"
+#include "../../TOOLS/fieldhelper.hpp"
+
+#include "dirichlet.hpp"
+#include "load.hpp"
+#include "materialtensor.hpp"
 
 #include "Intrepid_HGRAD_QUAD_C1_FEM.hpp"
 #include "Intrepid_DefaultCubatureFactory.hpp"
@@ -58,212 +63,6 @@
 #include "Intrepid_CellTools.hpp"
 
 #include "Teuchos_RCP.hpp"
-
-// Default loading: multiple point loads
-template<class Real>
-class Load {
-private:
-  std::vector<Real> loadMagnitude_;
-  std::vector<Real> loadPolar_, loadAzimuth_;
-  std::vector<Real> loadX_, loadY_, loadZ_;
-  std::vector<Real> loadWidthX_, loadWidthY_, loadWidthZ_;
-
-protected:
-  Real DegreesToRadians(const Real deg) const {
-    return deg * static_cast<Real>(M_PI) / static_cast<Real>(180);
-  }
-
-public:
-  virtual ~Load() {}
-
-  Load(Teuchos::ParameterList & parlist) {
-    // Grab Magnitudes
-    Teuchos::Array<Real> magnitude
-      = Teuchos::getArrayFromStringParameter<double>(parlist.sublist("Load"), "Magnitude");
-    loadMagnitude_ = magnitude.toVector();
-    // Grab Polar Angle
-    Teuchos::Array<Real> polar
-      = Teuchos::getArrayFromStringParameter<double>(parlist.sublist("Load"), "Polar Angle");
-    loadPolar_ = polar.toVector();
-    // Grab Azimuth Angle
-    Teuchos::Array<Real> azimuth
-      = Teuchos::getArrayFromStringParameter<double>(parlist.sublist("Load"), "Azimuth Angle");
-    loadAzimuth_ = azimuth.toVector();
-    // Grab X Location
-    Teuchos::Array<Real> Xlocation
-      = Teuchos::getArrayFromStringParameter<double>(parlist.sublist("Load"), "X Location");
-    loadX_ = Xlocation.toVector();
-    // Grab Y Location
-    Teuchos::Array<Real> Ylocation
-      = Teuchos::getArrayFromStringParameter<double>(parlist.sublist("Load"), "Y Location");
-    loadY_ = Ylocation.toVector();
-    // Grab Z Location
-    Teuchos::Array<Real> Zlocation
-      = Teuchos::getArrayFromStringParameter<double>(parlist.sublist("Load"), "Z Location");
-    loadZ_ = Zlocation.toVector();
-    // Grab X Width
-    Teuchos::Array<Real> Xwidth
-      = Teuchos::getArrayFromStringParameter<double>(parlist.sublist("Load"), "X Width");
-    loadWidthX_ = Xwidth.toVector();
-    // Grab Y Width
-    Teuchos::Array<Real> Ywidth
-      = Teuchos::getArrayFromStringParameter<double>(parlist.sublist("Load"), "Y Width");
-    loadWidthY_ = Ywidth.toVector();
-    // Grab Z Width
-    Teuchos::Array<Real> Zwidth
-      = Teuchos::getArrayFromStringParameter<double>(parlist.sublist("Load"), "Z Width");
-    loadWidthZ_ = Zwidth.toVector();
-
-    int polarSize = loadPolar_.size();
-    for (int i=0; i<polarSize; ++i) {
-      loadPolar_[i] = DegreesToRadians(loadPolar_[i]);
-    }
-
-    int azimuthSize = loadAzimuth_.size();
-    for (int i=0; i<azimuthSize; ++i) {
-      loadAzimuth_[i] = DegreesToRadians(loadAzimuth_[i]);
-    }
-  }
-
-  virtual Real loadFunc(const std::vector<Real> &coords,
-                        const int                dir,
-                        const std::vector<Real> &param) const {
-    Real val(0);
-    const Real half(0.5);
-    const int numLoads  = loadMagnitude_.size();
-    const int paramSize = param.size();
-    const int d         = coords.size();
-    for (int i = 0; i < numLoads; ++i) {
-      Real loadMagNoise(0), loadAngNoise0(0);
-      if (paramSize > 0 + d*i) {
-        loadMagNoise  = param[0 + d*i];
-      }
-      if (paramSize > 1 + d*i) {
-        loadAngNoise0 = DegreesToRadians(param[1 + d*i]);
-      }
-      const Real loadMagnitude = loadMagnitude_[i] + loadMagNoise;
-      const Real loadAngle0    = loadPolar_[i] + loadAngNoise0;
-      const Real Gx = std::exp(-half*std::pow(coords[0]-loadX_[i],2)/std::pow(loadWidthX_[i],2));
-      const Real Gy = std::exp(-half*std::pow(coords[1]-loadY_[i],2)/std::pow(loadWidthY_[i],2));
-
-      if (d==2) {
-        if (dir==0) {
-          val += loadMagnitude*std::cos(loadAngle0)*Gx*Gy;
-        }
-        if (dir==1) {
-          val += loadMagnitude*std::sin(loadAngle0)*Gx*Gy;
-        }
-      }
-      if (d==3) {
-        Real loadAngNoise1(0);
-        if (paramSize > 2 + d*i) {
-          loadAngNoise1 = DegreesToRadians(param[2 + d*i]);
-        }
-        const Real loadAngle1 = loadAzimuth_[i] + loadAngNoise1;
-        const Real Gz = std::exp(-half*std::pow(coords[2]-loadZ_[i],2)/std::pow(loadWidthZ_[i],2));
-
-        if (dir==0) {
-          val += loadMagnitude*std::sin(loadAngle0)*std::cos(loadAngle1)*Gx*Gy*Gz;
-        }
-        if (dir==1) {
-          val += loadMagnitude*std::sin(loadAngle0)*std::sin(loadAngle1)*Gx*Gy*Gz;
-        }
-        if (dir==2) {
-          val += loadMagnitude*std::cos(loadAngle0)*Gx*Gy*Gz;
-        }
-      }
-    }
-    return val;
-  }
-
-  void compute(std::vector<Teuchos::RCP<Intrepid::FieldContainer<Real> > > &load,
-               const Teuchos::RCP<FE<Real> >                               &fe,
-               const std::vector<Real>                                     &param,
-               const Real                                                   scale = 1) const {
-    // Retrieve dimensions.
-    int c = fe->gradN()->dimension(0);
-    int p = fe->gradN()->dimension(2);
-    int d = fe->gradN()->dimension(3);
-    std::vector<Real> coord(d);
-
-    for (int i=0; i<c; ++i) {
-      for (int j=0; j<p; ++j) {
-        for (int k=0; k<d; ++k) {
-          coord[k] = (*fe->cubPts())(i,j,k);
-        }
-        for (int k=0; k<d; ++k) {
-          (*load[k])(i,j) = loadFunc(coord, k, param)*scale;
-        }
-      }
-    }
-  }
-};
-
-
-template<class Real>
-class FieldHelper {
-  private:
-  const int numFields_, numDofs_;
-  const std::vector<int> numFieldDofs_;
-  const std::vector<std::vector<int> > fieldPattern_;
-
-  public:
-  FieldHelper(const int numFields, const int numDofs,
-              const std::vector<int> &numFieldDofs,
-              const std::vector<std::vector<int> > &fieldPattern)
-    : numFields_(numFields), numDofs_(numDofs),
-      numFieldDofs_(numFieldDofs), fieldPattern_(fieldPattern) {}
-
-  void splitFieldCoeff(std::vector<Teuchos::RCP<Intrepid::FieldContainer<Real> > > & U,
-                       const Teuchos::RCP<const Intrepid::FieldContainer<Real> >   & u_coeff) const {
-    U.resize(numFields_);
-    int  c = u_coeff->dimension(0);
-    for (int i=0; i<numFields_; ++i) {
-      U[i] = Teuchos::rcp(new Intrepid::FieldContainer<Real>(c,numFieldDofs_[i]));
-      for (int j=0; j<c; ++j) {
-        for (int k=0; k<numFieldDofs_[i]; ++k) {
-          //U[i](j,k) = u_coeff(j,offset[i]+k);
-          (*U[i])(j,k) = (*u_coeff)(j,fieldPattern_[i][k]);
-        }
-      }
-    }
-  }
-
-  void combineFieldCoeff(Teuchos::RCP<Intrepid::FieldContainer<Real> >   & res,
-                         const std::vector<Teuchos::RCP<Intrepid::FieldContainer<Real> > > & R) const {
-    int c = R[0]->dimension(0);  // number of cells
-    res = Teuchos::rcp(new Intrepid::FieldContainer<Real>(c, numDofs_));
-    for (int i=0; i<numFields_; ++i) {
-      for (int j=0; j<c; ++j) {
-        for (int k=0; k<numFieldDofs_[i]; ++k) {
-          (*res)(j,fieldPattern_[i][k]) = (*R[i])(j,k);
-        }
-      }
-    }
-  }
-
-  void combineFieldCoeff(Teuchos::RCP<Intrepid::FieldContainer<Real> >   & jac,
-                         const std::vector<std::vector<Teuchos::RCP<Intrepid::FieldContainer<Real> > > > & J) const {
-    int c = J[0][0]->dimension(0);  // number of cells
-    jac = Teuchos::rcp(new Intrepid::FieldContainer<Real>(c, numDofs_, numDofs_));        
-    for (int i=0; i<numFields_; ++i) {
-      for (int j=0; j<numFields_; ++j) {
-        for (int k=0; k<c; ++k) {
-          for (int l=0; l<numFieldDofs_[i]; ++l) {
-            for (int m=0; m<numFieldDofs_[j]; ++m) {
-              (*jac)(k,fieldPattern_[i][l],fieldPattern_[j][m]) = (*J[i][j])(k,l,m);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  int numFields(void) const {
-    return numFields_;
-  }
-
-};
 
 template <class Real>
 class PDE_TopoOpt : public PDE<Real> {
@@ -292,269 +91,11 @@ private:
   int numDofs_;                                  // total number of degrees of freedom for all (local) fields
   std::vector<int> offset_;                      // for each field, a counting offset
   std::vector<int> numFieldDofs_;                // for each field, number of degrees of freedom
-  
-  // Problem parameters.
-  Real youngsModulus_;
-  Real poissonRatio_;
-  bool isPlainStress_;
-  Real minDensity_;
-  Real maxDensity_;
-  Real powerSIMP_;
+
   Teuchos::RCP<Load<Real> > load_; 
-  std::vector<std::vector<Real> > materialMat_;
-
+  Teuchos::RCP<MaterialTensor<Real> > matTensor_;
+  Teuchos::RCP<Dirichlet<Real> > dirichlet_;
   Teuchos::RCP<FieldHelper<Real> > fieldHelper_;
-
-  // Precomputed quantities.
-  std::vector<Teuchos::RCP<Intrepid::FieldContainer<Real> > > BMat_;
-  std::vector<Teuchos::RCP<Intrepid::FieldContainer<Real> > > BdetJMat_;
-  std::vector<Teuchos::RCP<Intrepid::FieldContainer<Real> > > NMat_;
-  std::vector<Teuchos::RCP<Intrepid::FieldContainer<Real> > > NdetJMat_;
-  std::vector<Teuchos::RCP<Intrepid::FieldContainer<Real> > > CBdetJMat_;
-
-  Real dirichletFunc(const std::vector<Real> & coords, const int sideset, const int locSideId, const int dir) const {
-    Real val(0);
-    return val;
-  }
-
-  void computeDirichlet(void) {
-    // Compute Dirichlet values at DOFs.
-    int d = basisPtr_->getBaseCellTopology().getDimension();
-    int numSidesets = bdryCellLocIds_.size();
-    bdryCellDofValues_.resize(numSidesets);
-    for (int i=0; i<numSidesets; ++i) {
-      int numLocSides = bdryCellLocIds_[i].size();
-      bdryCellDofValues_[i].resize(numLocSides);
-      for (int j=0; j<numLocSides; ++j) {
-        int c = bdryCellLocIds_[i][j].size();
-        int f = basisPtr_->getCardinality();
-        bdryCellDofValues_[i][j] = Teuchos::rcp(new Intrepid::FieldContainer<Real>(c, f, d));
-        Teuchos::RCP<Intrepid::FieldContainer<Real> > coords =
-          Teuchos::rcp(new Intrepid::FieldContainer<Real>(c, f, d));
-        if (c > 0) {
-          fe_->computeDofCoords(coords, bdryCellNodes_[i][j]);
-        }
-        for (int k=0; k<c; ++k) {
-          for (int l=0; l<f; ++l) {
-            std::vector<Real> dofpoint(d);
-            //std::cout << "Sideset " << i << " LocalSide " << j << "  Cell " << k << "  Field " << l << "  Coord ";
-            for (int m=0; m<d; ++m) {
-              dofpoint[m] = (*coords)(k, l, m);
-              //std::cout << dofpoint[m] << "  ";
-            }
-
-            for (int m=0; m<d; ++m) {
-              (*bdryCellDofValues_[i][j])(k, l, m) = dirichletFunc(dofpoint, i, j, m);
-              //std::cout << "  " << m << "-Value " << dirichletFunc(dofpoint, i, j, m);
-            }
-            //std::cout << std::endl;
-          }
-        }
-      }
-    }
-  }
-
-  void computeMaterialTensor(const int d) {
-    int matd = (d*(d+1))/2;
-    std::vector<Real> tmpvec(matd);
-    materialMat_.resize(matd, tmpvec);
-    if ((d==2) && (isPlainStress_)) {
-      Real one(1), half(0.5);
-      Real factor1 = youngsModulus_ /(one-poissonRatio_*poissonRatio_);
-      materialMat_[0][0] = factor1;
-      materialMat_[0][1] = factor1 * poissonRatio_;
-      materialMat_[1][0] = factor1 * poissonRatio_;
-      materialMat_[1][1] = factor1;
-      materialMat_[2][2] = factor1 * half * (one-poissonRatio_);
-    }		
-    else if ((d==2) && (!isPlainStress_)) {
-      Real one(1), two(2), half(0.5);
-      Real factor2 = youngsModulus_ /(one+poissonRatio_)/(one-two*poissonRatio_);
-      materialMat_[0][0] = factor2 * (one-poissonRatio_);
-      materialMat_[0][1] = factor2 * poissonRatio_;
-      materialMat_[1][0] = factor2 * poissonRatio_;
-      materialMat_[1][1] = factor2 * (one-poissonRatio_);
-      materialMat_[2][2] = factor2 * half * (one-two*poissonRatio_);
-    }
-    else {
-      Real one(1), two(2), half(0.5);
-      Real lam = youngsModulus_*poissonRatio_/(one+poissonRatio_)/(one-two*poissonRatio_);
-      Real mu = half*youngsModulus_/(one+poissonRatio_);
-      materialMat_[0][0] = lam + two*mu;
-      materialMat_[0][1] = lam;
-      materialMat_[0][2] = lam;
-      materialMat_[1][0] = lam;
-      materialMat_[1][1] = lam + two*mu;
-      materialMat_[1][2] = lam;
-      materialMat_[2][0] = lam;
-      materialMat_[2][1] = lam;
-      materialMat_[2][2] = lam + two*mu;
-      materialMat_[3][3] = mu;
-      materialMat_[4][4] = mu;
-      materialMat_[5][5] = mu;
-    }				
-  }
-
-  void computeNBmats(void) {
-    int c = fe_->gradN()->dimension(0);
-    int f = fe_->gradN()->dimension(1);
-    int p = fe_->gradN()->dimension(2);
-    int d = fe_->gradN()->dimension(3);
-    int matd = materialMat_.size();
-
-    for (int i=0; i<d; ++i) {
-      BMat_.push_back(Teuchos::rcp(new Intrepid::FieldContainer<Real>(c,f,p,matd)));
-      BdetJMat_.push_back(Teuchos::rcp(new Intrepid::FieldContainer<Real>(c,f,p,matd)));
-      CBdetJMat_.push_back(Teuchos::rcp(new Intrepid::FieldContainer<Real>(c,f,p,matd)));
-      NMat_.push_back(Teuchos::rcp(new Intrepid::FieldContainer<Real>(c,f,p,d)));
-      NdetJMat_.push_back(Teuchos::rcp(new Intrepid::FieldContainer<Real>(c,f,p,d)));
-    }
-
-    if (d==2) {
-      for (int i=0; i<c; ++i) {
-        for (int j=0; j<f; ++j) {
-      	  for (int k=0; k<p; ++k) {
-            (*NMat_[0])(i, j, k, 0) = (*fe_->N())(i, j, k);
-            (*NMat_[1])(i, j, k, 1) = (*fe_->N())(i, j, k);
-            (*NdetJMat_[0])(i, j, k, 0) = (*fe_->NdetJ())(i, j, k);
-            (*NdetJMat_[1])(i, j, k, 1) = (*fe_->NdetJ())(i, j, k);
-                
-            (*BMat_[0])(i, j, k, 0) = (*fe_->gradN())(i, j, k, 0);
-            (*BMat_[1])(i, j, k, 1) = (*fe_->gradN())(i, j, k, 1);
-            (*BMat_[0])(i, j, k, 2) = (*fe_->gradN())(i, j, k, 1);
-            (*BMat_[1])(i, j, k, 2) = (*fe_->gradN())(i, j, k, 0);
-
-            (*BdetJMat_[0])(i, j, k, 0) = (*fe_->gradNdetJ())(i, j, k, 0);
-            (*BdetJMat_[1])(i, j, k, 1) = (*fe_->gradNdetJ())(i, j, k, 1);
-            (*BdetJMat_[0])(i, j, k, 2) = (*fe_->gradNdetJ())(i, j, k, 1);
-            (*BdetJMat_[1])(i, j, k, 2) = (*fe_->gradNdetJ())(i, j, k, 0);
-          }
-        }
-      }
-    }
-
-    if(d==3) {
-      for (int i=0; i<c; ++i) {
-        for (int j=0; j<f; ++j) {
-          for (int k=0; k<p; ++k) {
-            (*NMat_[0])(i, j, k, 0) = (*fe_->N())(i, j, k);
-            (*NMat_[1])(i, j, k, 1) = (*fe_->N())(i, j, k);
-            (*NMat_[2])(i, j, k, 2) = (*fe_->N())(i, j, k);
-            (*NdetJMat_[0])(i, j, k, 0) = (*fe_->NdetJ())(i, j, k);
-            (*NdetJMat_[1])(i, j, k, 1) = (*fe_->NdetJ())(i, j, k);
-            (*NdetJMat_[2])(i, j, k, 2) = (*fe_->NdetJ())(i, j, k);
-            
-            (*BMat_[0])(i, j, k, 0) = (*fe_->gradN())(i, j, k, 0);
-            (*BMat_[1])(i, j, k, 1) = (*fe_->gradN())(i, j, k, 1);
-            (*BMat_[2])(i, j, k, 2) = (*fe_->gradN())(i, j, k, 2);
-            (*BMat_[1])(i, j, k, 3) = (*fe_->gradN())(i, j, k, 2);
-            (*BMat_[2])(i, j, k, 3) = (*fe_->gradN())(i, j, k, 1);
-            (*BMat_[0])(i, j, k, 4) = (*fe_->gradN())(i, j, k, 2);
-            (*BMat_[2])(i, j, k, 4) = (*fe_->gradN())(i, j, k, 0);
-            (*BMat_[0])(i, j, k, 5) = (*fe_->gradN())(i, j, k, 1);
-            (*BMat_[1])(i, j, k, 5) = (*fe_->gradN())(i, j, k, 0);
-                
-            (*BdetJMat_[0])(i, j, k, 0) = (*fe_->gradNdetJ())(i, j, k, 0);
-            (*BdetJMat_[1])(i, j, k, 1) = (*fe_->gradNdetJ())(i, j, k, 1);
-            (*BdetJMat_[2])(i, j, k, 2) = (*fe_->gradNdetJ())(i, j, k, 2);
-            (*BdetJMat_[1])(i, j, k, 3) = (*fe_->gradNdetJ())(i, j, k, 2);
-            (*BdetJMat_[2])(i, j, k, 3) = (*fe_->gradNdetJ())(i, j, k, 1);
-            (*BdetJMat_[0])(i, j, k, 4) = (*fe_->gradNdetJ())(i, j, k, 2);
-            (*BdetJMat_[2])(i, j, k, 4) = (*fe_->gradNdetJ())(i, j, k, 0);
-            (*BdetJMat_[0])(i, j, k, 5) = (*fe_->gradNdetJ())(i, j, k, 1);
-            (*BdetJMat_[1])(i, j, k, 5) = (*fe_->gradNdetJ())(i, j, k, 0);
-          }
-        }
-      }
-    } 
-
-    for (int i=0; i<c; ++i) {
-      for (int j=0; j<f; ++j) {
-        for (int k=0; k<p; ++k) {
-          for (int l=0; l<d; ++l) {
-            for (int m=0; m<matd; ++m) {
-              for (int n=0; n<matd; ++n) {
-                (*CBdetJMat_[l])(i,j,k,m) += materialMat_[m][n] * (*BdetJMat_[l])(i,j,k,n);
-              }
-            }
-          }
-        }
-      }
-    }
-
-  }
-
-  void applyTensor(Teuchos::RCP<Intrepid::FieldContainer<Real> > & out, const Teuchos::RCP<Intrepid::FieldContainer<Real> > & inData) const {
-    int c = fe_->gradN()->dimension(0);
-    int p = fe_->gradN()->dimension(2);
-    int matd = materialMat_.size();
-
-    for (int i=0; i<c; ++i) {
-      for (int j=0; j<p; ++j) {
-        for (int k=0; k<matd; ++k) {
-          for (int l=0; l<matd; ++l) {
-            (*out)(i,j,k) += materialMat_[k][l] * (*inData)(i,j,l);
-          }
-        }
-      }
-    }
-  }
-
-  void computeUmat(Teuchos::RCP<Intrepid::FieldContainer<Real> > & UMat, std::vector<Teuchos::RCP<Intrepid::FieldContainer<Real> > > & gradU) const {
-    int c = fe_->gradN()->dimension(0);
-    int p = fe_->gradN()->dimension(2);
-    int d = fe_->gradN()->dimension(3);
-    int matd = materialMat_.size();
-
-    UMat = Teuchos::rcp(new Intrepid::FieldContainer<Real>(c,p,matd));
-
-    if (d==2) {
-      for (int i=0; i<c; ++i) {
-        for (int j=0; j<p; ++j) {
-          (*UMat)(i, j, 0) = (*gradU[0])(i, j, 0);
-          (*UMat)(i, j, 1) = (*gradU[1])(i, j, 1);
-          (*UMat)(i, j, 2) = (*gradU[0])(i, j, 1) + (*gradU[1])(i, j, 0);
-        }
-      }
-    }
-
-    if(d==3) {
-      for (int i=0; i<c; ++i) {
-        for (int j=0; j<p; ++j) {
-          (*UMat)(i, j, 0) = (*gradU[0])(i, j, 0);
-          (*UMat)(i, j, 1) = (*gradU[1])(i, j, 1);
-          (*UMat)(i, j, 2) = (*gradU[2])(i, j, 2);
-          (*UMat)(i, j, 3) = (*gradU[1])(i, j, 2) + (*gradU[2])(i, j, 1);
-          (*UMat)(i, j, 4) = (*gradU[0])(i, j, 2) + (*gradU[2])(i, j, 0);
-          (*UMat)(i, j, 5) = (*gradU[0])(i, j, 1) + (*gradU[1])(i, j, 0);
-        }
-      }
-    } 
-
-  }
-
-  void computeDensity(Teuchos::RCP<Intrepid::FieldContainer<Real> > & rho,
-                      const Teuchos::RCP<Intrepid::FieldContainer<Real> > & Z,
-                      const int deriv = 0) const {
-    // Retrieve dimensions.
-    int c = fe_->gradN()->dimension(0);
-    int p = fe_->gradN()->dimension(2);
-
-    for (int i=0; i<c; ++i) {
-      for (int j=0; j<p; ++j) {
-        if (deriv==0) {
-          (*rho)(i,j) = minDensity_ + (maxDensity_-minDensity_)*std::pow((*Z)(i,j), powerSIMP_);
-        }
-        else if (deriv==1) { 
-          (*rho)(i,j) = powerSIMP_*(maxDensity_-minDensity_)*std::pow((*Z)(i,j), powerSIMP_-1);
-        }
-        else if	(deriv==2) {
-          (*rho)(i,j) = powerSIMP_*(powerSIMP_-1)*(maxDensity_-minDensity_)*std::pow((*Z)(i,j), powerSIMP_-2);
-        } 
-      }
-    }
-    
-  }
 
 public:
   PDE_TopoOpt(Teuchos::ParameterList &parlist) {
@@ -576,16 +117,9 @@ public:
     int bdryCubDegree = parlist.sublist("Problem").get("Boundary Cubature Degree",2); // set cubature degree, e.g., 2
     bdryCub_ = cubFactory.create(bdryCellType, bdryCubDegree);
 
-    // Other problem parameters.
-    youngsModulus_  = parlist.sublist("Problem").get("Young's Modulus",     1.0);
-    poissonRatio_   = parlist.sublist("Problem").get("Poisson Ratio",       0.3);
-    isPlainStress_  = parlist.sublist("Problem").get("Use Plain Stress",    true);
-    minDensity_     = parlist.sublist("Problem").get("Minimum Density",     1e-4);
-    maxDensity_     = parlist.sublist("Problem").get("Maximum Density",     1.0);
-    powerSIMP_      = parlist.sublist("Problem").get("SIMP Power",          3.0);
-    computeMaterialTensor(d);
-
-    load_  = Teuchos::rcp(new Load<Real>(parlist.sublist("Problem")));
+    matTensor_ = Teuchos::rcp(new MaterialTensor<Real>(parlist.sublist("Problem")));
+    load_      = Teuchos::rcp(new Load<Real>(parlist.sublist("Problem")));
+    dirichlet_ = Teuchos::rcp(new Dirichlet<Real>(parlist.sublist("Problem")));
 
     numDofs_ = 0;
     numFields_ = basisPtrs_.size();
@@ -612,7 +146,7 @@ public:
     int f = fe_->gradN()->dimension(1);
     int p = fe_->gradN()->dimension(2);
     int d = fe_->gradN()->dimension(3);
-    int matd = materialMat_.size();
+    int matd = matTensor_->getMatrixDim();
  
     // Initialize residuals.
     std::vector<Teuchos::RCP<Intrepid::FieldContainer<Real> > > R(d);
@@ -644,16 +178,16 @@ public:
       fe_->evaluateGradient(gradDisp_eval[i], U[i]);
     }
     fe_->evaluateValue(valZ_eval, Z[0]);
-    computeUmat(UMat, gradDisp_eval);
-    computeDensity(rho, valZ_eval);
+    matTensor_->computeUmat(UMat, gradDisp_eval);
+    matTensor_->computeDensity(rho, valZ_eval);
     load_->compute(load, fe_, PDE<Real>::getParameter(), -1.0);
     Intrepid::FunctionSpaceTools::scalarMultiplyDataData<Real>(*rhoUMat, *rho, *UMat);
 
     /*** Evaluate weak form of the residual. ***/
     for (int i=0; i<d; ++i) {
       Intrepid::FunctionSpaceTools::integrate<Real>(*R[i],
-                                                    *rhoUMat,           // rho B U
-                                                    *CBdetJMat_[i],     // B' C
+                                                    *rhoUMat,               // rho B U
+                                                    *matTensor_->CBdetJ(i), // B' C
                                                     Intrepid::COMP_CPP,
                                                     false);
       Intrepid::FunctionSpaceTools::integrate<Real>(*R[i],
@@ -664,29 +198,7 @@ public:
     }
 
     // APPLY DIRICHLET CONDITIONS
-    int numSideSets = bdryCellLocIds_.size();
-    if (numSideSets > 0) {
-      computeDirichlet();
-      for (int i = 0; i < numSideSets; ++i) {
-        if ((i==3)) {
-          int numLocalSideIds = bdryCellLocIds_[i].size();
-          for (int j = 0; j < numLocalSideIds; ++j) {
-            int numCellsSide = bdryCellLocIds_[i][j].size();
-            int numBdryDofs = fidx_[j].size();
-            for (int k = 0; k < numCellsSide; ++k) {
-              int cidx = bdryCellLocIds_[i][j][k];
-              for (int l = 0; l < numBdryDofs; ++l) {
-                //std::cout << "\n  i=" << i << "   cidx=" << cidx << "   j=" << j << "  l=" << l << "  " << fidx_[j][l] << " " << (*bdryCellDofValues_[i][j])(k,fidx_[j][l],0);
-                //std::cout << "\n  i=" << i << "   cidx=" << cidx << "   j=" << j << "  l=" << l << "  " << fidx_[j][l] << " " << (*bdryCellDofValues_[i][j])(k,fidx_[j][l],1);
-                for (int m=0; m < d; ++m) {
-                  (*R[m])(cidx,fidx_[j][l]) = (*U[m])(cidx,fidx_[j][l]) - (*bdryCellDofValues_[i][j])(k,fidx_[j][l],m);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+    dirichlet_->applyResidual(R,U);
 
     // Combine the residuals.
     fieldHelper_->combineFieldCoeff(res, R);
@@ -701,7 +213,7 @@ public:
     int f = fe_->gradN()->dimension(1);
     int p = fe_->gradN()->dimension(2);
     int d = fe_->gradN()->dimension(3);
-    int matd = materialMat_.size();
+    int matd = matTensor_->getMatrixDim();
  
     // Initialize Jacobians.
     std::vector<std::vector<Teuchos::RCP<Intrepid::FieldContainer<Real> > > > J(d);
@@ -724,48 +236,24 @@ public:
       rhoBMat[i] =  Teuchos::rcp(new Intrepid::FieldContainer<Real>(c, f, p, matd));
     }
     fe_->evaluateValue(valZ_eval, Z[0]);
-    computeDensity(rho, valZ_eval);
+    matTensor_->computeDensity(rho, valZ_eval);
     for (int i=0; i<d; ++i) {
-      Intrepid::FunctionSpaceTools::scalarMultiplyDataField<Real>(*rhoBMat[i], *rho, *BMat_[i]);
+      Intrepid::FunctionSpaceTools::scalarMultiplyDataField<Real>(*rhoBMat[i], *rho, *matTensor_->B(i));
     }
 
     /*** Evaluate weak form of the Jacobian. ***/
     for (int i=0; i<d; ++i) {
       for (int j=0; j<d; ++j) {
         Intrepid::FunctionSpaceTools::integrate<Real>(*J[i][j],
-                                                      *rhoBMat[i],          // rho B
-                                                      *CBdetJMat_[j],       // B' C
+                                                      *rhoBMat[i],                  // rho B
+                                                      *matTensor_->CBdetJ(j), // B' C
                                                       Intrepid::COMP_CPP,
                                                       false);
       }
     }
 
     // APPLY DIRICHLET CONDITIONS
-    int numSideSets = bdryCellLocIds_.size();
-    if (numSideSets > 0) {
-      for (int i = 0; i < numSideSets; ++i) {
-        if ((i==3)) {
-          int numLocalSideIds = bdryCellLocIds_[i].size();
-          for (int j = 0; j < numLocalSideIds; ++j) {
-            int numCellsSide = bdryCellLocIds_[i][j].size();
-            int numBdryDofs = fidx_[j].size();
-            for (int k = 0; k < numCellsSide; ++k) {
-              int cidx = bdryCellLocIds_[i][j][k];
-              for (int l = 0; l < numBdryDofs; ++l) {
-                for (int m=0; m < f; ++m) {
-                  for (int n=0; n < d; ++n) {
-                    for (int p=0; p < d; ++p) {
-                      (*J[n][p])(cidx,fidx_[j][l],m) = static_cast<Real>(0);
-                    }
-                    (*J[n][n])(cidx,fidx_[j][l],fidx_[j][l]) = static_cast<Real>(1);
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+    dirichlet_->applyJacobian1(J);
 
     // Combine the jacobians.
     fieldHelper_->combineFieldCoeff(jac, J);
@@ -782,7 +270,7 @@ public:
     int f = fe_->gradN()->dimension(1);
     int p = fe_->gradN()->dimension(2);
     int d = fe_->gradN()->dimension(3);
-    int matd = materialMat_.size();
+    int matd = matTensor_->getMatrixDim();
 
     // Initialize Jacobians.
     std::vector<std::vector<Teuchos::RCP<Intrepid::FieldContainer<Real> > > > J(d);
@@ -816,12 +304,12 @@ public:
       fe_->evaluateGradient(gradDisp_eval[i], U[i]);
     }
     fe_->evaluateValue(valZ_eval, Z[0]);
-    computeUmat(UMat, gradDisp_eval);
-    computeDensity(rho, valZ_eval, 1);  // first derivative
+    matTensor_->computeUmat(UMat, gradDisp_eval);
+    matTensor_->computeDensity(rho, valZ_eval, 1);  // first derivative
     Intrepid::FunctionSpaceTools::scalarMultiplyDataData<Real>(*rhoUMat, *rho, *UMat);
 
     for (int i=0; i<d; ++i) {
-      Intrepid::FunctionSpaceTools::dotMultiplyDataField<Real>(*CBrhoUMat[i], *rhoUMat, *CBdetJMat_[i]);
+      Intrepid::FunctionSpaceTools::dotMultiplyDataField<Real>(*CBrhoUMat[i], *rhoUMat, *matTensor_->CBdetJ(i));
     }
 
     /*** Evaluate weak form of the residual. ***/
@@ -834,30 +322,7 @@ public:
     }
 
     // APPLY DIRICHLET CONDITIONS
-    int numSideSets = bdryCellLocIds_.size();
-    if (numSideSets > 0) {
-      for (int i = 0; i < numSideSets; ++i) {
-        if ((i==3)) {
-          int numLocalSideIds = bdryCellLocIds_[i].size();
-          for (int j = 0; j < numLocalSideIds; ++j) {
-            int numCellsSide = bdryCellLocIds_[i][j].size();
-            int numBdryDofs = fidx_[j].size();
-            for (int k = 0; k < numCellsSide; ++k) {
-              int cidx = bdryCellLocIds_[i][j][k];
-              for (int l = 0; l < numBdryDofs; ++l) {
-                for (int m=0; m < f; ++m) {
-                  for (int n=0; n < d; ++n) {
-                    for (int p=0; p < d; ++p) {
-                      (*J[n][p])(cidx,fidx_[j][l],m) = static_cast<Real>(0);
-                    }
-                  }
-                }
-              }
-            }
-          }
-	}
-      }
-    }
+    dirichlet_->applyJacobian2(J);
 
     // Combine the jacobians.
     fieldHelper_->combineFieldCoeff(jac, J);
@@ -882,7 +347,7 @@ public:
     int f = fe_->gradN()->dimension(1);
     int p = fe_->gradN()->dimension(2);
     int d = fe_->gradN()->dimension(3);
-    int matd = materialMat_.size();
+    int matd = matTensor_->getMatrixDim();
 
     // Initialize Hessians.
     std::vector<std::vector<Teuchos::RCP<Intrepid::FieldContainer<Real> > > > J(d);
@@ -899,27 +364,7 @@ public:
     fieldHelper_->splitFieldCoeff(Z, z_coeff);
 
     // Apply Dirichlet conditions to the multipliers.
-    int numSideSets = bdryCellLocIds_.size();
-    if (numSideSets > 0) {
-      for (int i = 0; i < numSideSets; ++i) {
-        if ((i==3)) {
-          int numLocalSideIds = bdryCellLocIds_[i].size();
-          for (int j = 0; j < numLocalSideIds; ++j) {
-            int numCellsSide = bdryCellLocIds_[i][j].size();
-            int numBdryDofs = fidx_[j].size();
-            for (int k = 0; k < numCellsSide; ++k) {
-              int cidx = bdryCellLocIds_[i][j][k];
-              for (int l = 0; l < numBdryDofs; ++l) {
-                //std::cout << "\n   j=" << j << "  l=" << l << "  " << fidx[j][l];
-                for (int m=0; m < d; ++m) {
-                  (*L[m])(cidx,fidx_[j][l]) = static_cast<Real>(0);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+    dirichlet_->applyMultiplier(L);
 
     // Evaluate/interpolate finite element fields on cells.
     Teuchos::RCP<Intrepid::FieldContainer<Real> > rho =
@@ -939,12 +384,12 @@ public:
       fe_->evaluateGradient(gradDisp_eval[i], L[i]);
     }
     fe_->evaluateValue(valZ_eval, Z[0]);
-    computeUmat(LMat, gradDisp_eval);
-    computeDensity(rho, valZ_eval, 1);  // first derivative
+    matTensor_->computeUmat(LMat, gradDisp_eval);
+    matTensor_->computeDensity(rho, valZ_eval, 1);  // first derivative
     Intrepid::FunctionSpaceTools::scalarMultiplyDataData<Real>(*rhoLMat, *rho, *LMat);
 
     for (int i=0; i<d; ++i) {
-      Intrepid::FunctionSpaceTools::dotMultiplyDataField<Real>(*CBrhoLMat[i], *rhoLMat, *CBdetJMat_[i]);
+      Intrepid::FunctionSpaceTools::dotMultiplyDataField<Real>(*CBrhoLMat[i], *rhoLMat, *matTensor_->CBdetJ(i));
     }
 
     /*** Evaluate weak form of the residual. ***/
@@ -971,7 +416,7 @@ public:
     int f = fe_->gradN()->dimension(1);
     int p = fe_->gradN()->dimension(2);
     int d = fe_->gradN()->dimension(3);
-    int matd = materialMat_.size();
+    int matd = matTensor_->getMatrixDim();
 
     // Initialize Hessians.
     std::vector<std::vector<Teuchos::RCP<Intrepid::FieldContainer<Real> > > > J(d);
@@ -988,27 +433,7 @@ public:
     fieldHelper_->splitFieldCoeff(Z, z_coeff);
 
     // Apply Dirichlet conditions to the multipliers.
-    int numSideSets = bdryCellLocIds_.size();
-    if (numSideSets > 0) {
-      for (int i = 0; i < numSideSets; ++i) {
-        if ((i==3)) {
-          int numLocalSideIds = bdryCellLocIds_[i].size();
-          for (int j = 0; j < numLocalSideIds; ++j) {
-            int numCellsSide = bdryCellLocIds_[i][j].size();
-            int numBdryDofs = fidx_[j].size();
-            for (int k = 0; k < numCellsSide; ++k) {
-              int cidx = bdryCellLocIds_[i][j][k];
-              for (int l = 0; l < numBdryDofs; ++l) {
-                //std::cout << "\n   j=" << j << "  l=" << l << "  " << fidx[j][l];
-                for (int m=0; m < d; ++m) {
-                  (*L[m])(cidx,fidx_[j][l]) = static_cast<Real>(0);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+    dirichlet_->applyMultiplier(L);
 
     // Evaluate/interpolate finite element fields on cells.
     Teuchos::RCP<Intrepid::FieldContainer<Real> > rho =
@@ -1028,12 +453,12 @@ public:
       fe_->evaluateGradient(gradDisp_eval[i], L[i]);
     }
     fe_->evaluateValue(valZ_eval, Z[0]);
-    computeUmat(LMat, gradDisp_eval);
-    computeDensity(rho, valZ_eval, 1);  // first derivative
+    matTensor_->computeUmat(LMat, gradDisp_eval);
+    matTensor_->computeDensity(rho, valZ_eval, 1);  // first derivative
     Intrepid::FunctionSpaceTools::scalarMultiplyDataData<Real>(*rhoLMat, *rho, *LMat);
 
     for (int i=0; i<d; ++i) {
-      Intrepid::FunctionSpaceTools::dotMultiplyDataField<Real>(*CBrhoLMat[i], *rhoLMat, *CBdetJMat_[i]);
+      Intrepid::FunctionSpaceTools::dotMultiplyDataField<Real>(*CBrhoLMat[i], *rhoLMat, *matTensor_->CBdetJ(i));
     }
 
     /*** Evaluate weak form of the residual. ***/
@@ -1060,7 +485,7 @@ public:
     int f = fe_->gradN()->dimension(1);
     int p = fe_->gradN()->dimension(2);
     int d = fe_->gradN()->dimension(3);
-    int matd = materialMat_.size();
+    int matd = matTensor_->getMatrixDim();
 
     // Initialize Hessians.
     std::vector<std::vector<Teuchos::RCP<Intrepid::FieldContainer<Real> > > > J(d);
@@ -1079,27 +504,7 @@ public:
     fieldHelper_->splitFieldCoeff(Z, z_coeff);
 
     // Apply Dirichlet conditions to the multipliers.
-    int numSideSets = bdryCellLocIds_.size();
-    if (numSideSets > 0) {
-      for (int i = 0; i < numSideSets; ++i) {
-        if ((i==3)) {
-          int numLocalSideIds = bdryCellLocIds_[i].size();
-          for (int j = 0; j < numLocalSideIds; ++j) {
-            int numCellsSide = bdryCellLocIds_[i][j].size();
-            int numBdryDofs = fidx_[j].size();
-            for (int k = 0; k < numCellsSide; ++k) {
-              int cidx = bdryCellLocIds_[i][j][k];
-              for (int l = 0; l < numBdryDofs; ++l) {
-                //std::cout << "\n   j=" << j << "  l=" << l << "  " << fidx[j][l];
-                for (int m=0; m < d; ++m) {
-                  (*L[m])(cidx,fidx_[j][l]) = static_cast<Real>(0);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+    dirichlet_->applyMultiplier(L);
 
     // Evaluate/interpolate finite element fields on cells.
     Teuchos::RCP<Intrepid::FieldContainer<Real> > rho =
@@ -1127,11 +532,11 @@ public:
       fe_->evaluateGradient(gradDispL_eval[i], L[i]);
     }
     fe_->evaluateValue(valZ_eval, Z[0]);
-    computeUmat(UMat, gradDispU_eval);
-    computeUmat(LMat, gradDispL_eval);
-    computeDensity(rho, valZ_eval, 2);  // second derivative
+    matTensor_->computeUmat(UMat, gradDispU_eval);
+    matTensor_->computeUmat(LMat, gradDispL_eval);
+    matTensor_->computeDensity(rho, valZ_eval, 2);  // second derivative
     Intrepid::FunctionSpaceTools::scalarMultiplyDataData<Real>(*rhoLMat, *rho, *LMat);
-    applyTensor(CUMat, UMat);
+    matTensor_->applyTensor(CUMat, UMat);
 
     Intrepid::FunctionSpaceTools::dotMultiplyDataData<Real>(*CUrhoLMat, *rhoLMat, *CUMat);
     Intrepid::FunctionSpaceTools::scalarMultiplyDataField<Real>(*NCUrhoLMat, *CUrhoLMat, *fe_->N());
@@ -1209,16 +614,8 @@ public:
     // Finite element definition.
     fe_ = Teuchos::rcp(new FE<Real>(volCellNodes_,basisPtr_,cellCub_));
     fidx_ = fe_->getBoundaryDofs();
-    // Construct boundary FE
-    /*int sideset = 6;
-    int numLocSides = bdryCellNodes[sideset].size();
-    feBdry_.resize(numLocSides);
-    for (int j = 0; j < numLocSides; ++j) {
-      if (bdryCellNodes[sideset][j] != Teuchos::null) {
-        feBdry_[j] = Teuchos::rcp(new FE<Real>(bdryCellNodes[sideset][j],basisPtr_,bdryCub_,j));
-      }
-    }*/
-    computeNBmats();
+    dirichlet_->setCellNodes(bdryCellNodes_,bdryCellLocIds_,fidx_);
+    matTensor_->setFE(fe_);
   }
 
   void setFieldPattern(const std::vector<std::vector<int> > & fieldPattern) {
@@ -1244,6 +641,10 @@ public:
 
   const Teuchos::RCP<Load<Real> > getLoad(void) const {
     return load_;
+  }
+
+  const Teuchos::RCP<MaterialTensor<Real> > getMaterialTensor(void) const {
+    return matTensor_;
   }
 
 }; // PDE_TopoOpt

@@ -787,14 +787,8 @@ public:
   T
   value(Vector<T, N> const & X)
   {
-    // Get a convenience reference to the failed flag in case it is used more
-    // than once.
-    bool &
-    failed = Base::failed;
-
     // Set the flag to signal that an unrecoverable error happened.
-
-    failed = true;
+    this->set_failed("Testing failure mechanism");
 
     T const
     fn = 0.0;
@@ -997,7 +991,7 @@ public:
     assert(x.get_dimension() == NV);
 
     Vector<T, NC>
-    c(ZEROS);
+    c(Filler::ZEROS);
 
     c(0) = dot(x, x) - 10.0;
 
@@ -1045,7 +1039,7 @@ public:
     assert(x.get_dimension() == NV);
 
     Vector<T, NC>
-    f(ZEROS);
+    f(Filler::ZEROS);
 
     f(0) = r_ * r_ - norm_square(x - c_);
 
@@ -1096,7 +1090,7 @@ public:
     assert(x.get_dimension() == NV);
 
     Vector<T, NC>
-    f(ZEROS);
+    f(Filler::ZEROS);
 
     f(0) = r_ * r_ - norm_square(x - c_);
 

@@ -46,15 +46,7 @@
 
 #define NPOS std::string::npos
 
-IOShell::Interface::Interface()
-    : compose_output("none"), maximum_time(0.0), minimum_time(0.0), surface_split_type(1),
-      data_storage_type(0), compression_level(0), shuffle(false), debug(false), statistics(false),
-      do_transform_fields(false), ints_64_bit(false), reals_32_bit(false), netcdf4(false),
-      in_memory_read(false), in_memory_write(false), lower_case_variable_names(true),
-      fieldSuffixSeparator('_')
-{
-  enroll_options();
-}
+IOShell::Interface::Interface() { enroll_options(); }
 
 IOShell::Interface::~Interface() = default;
 
@@ -77,6 +69,11 @@ void IOShell::Interface::enroll_options()
                   "Write the data from the specified group to the output file.\n", nullptr);
 
   options_.enroll("64-bit", Ioss::GetLongOption::NoValue, "Use 64-bit integers on output database",
+                  nullptr);
+
+  options_.enroll("32-bit", Ioss::GetLongOption::NoValue,
+                  "Use 32-bit integers on output database."
+                  " This is the default unless input database uses 64-bit integers",
                   nullptr);
 
   options_.enroll("float", Ioss::GetLongOption::NoValue,
@@ -147,6 +144,10 @@ void IOShell::Interface::enroll_options()
                   "elements assigned randomly to processors in a way that preserves balance (do "
                   "not use for a real run)",
                   nullptr);
+  options_.enroll("serialize_io_size", Ioss::GetLongOption::MandatoryValue,
+                  "Number of processors that can perform simulataneous IO operations in "
+                  "a parallel run; 0 to disable",
+                  nullptr);
 #endif
 
   options_.enroll("external", Ioss::GetLongOption::NoValue,
@@ -158,11 +159,20 @@ void IOShell::Interface::enroll_options()
   options_.enroll("statistics", Ioss::GetLongOption::NoValue,
                   "output parallel io timing statistics", nullptr);
 
+  options_.enroll("memory_statistics", Ioss::GetLongOption::NoValue,
+                  "output memory usage throughout code execution", nullptr);
+
   options_.enroll("Maximum_Time", Ioss::GetLongOption::MandatoryValue,
                   "Maximum time on input database to transfer to output database", nullptr);
 
   options_.enroll("Minimum_Time", Ioss::GetLongOption::MandatoryValue,
                   "Minimum time on input database to transfer to output database", nullptr);
+
+  options_.enroll("append_after_time", Ioss::GetLongOption::MandatoryValue,
+                  "add steps on input database after specified time on output database", nullptr);
+
+  options_.enroll("append_after_step", Ioss::GetLongOption::MandatoryValue,
+                  "add steps on input database after specified step on output database", nullptr);
 
   options_.enroll("field_suffix_separator", Ioss::GetLongOption::MandatoryValue,
                   "Character used to separate a field suffix from the field basename\n"
@@ -171,13 +181,14 @@ void IOShell::Interface::enroll_options()
 
   options_.enroll("surface_split_scheme", Ioss::GetLongOption::MandatoryValue,
                   "Method used to split sidesets into homogenous blocks\n"
-                  "\t\tOptions are: TOPOLOGY, BLOCK, NOSPLIT",
+                  "\t\tOptions are: TOPOLOGY, BLOCK, NO_SPLIT",
                   "TOPOLOGY");
 
 #ifdef SEACAS_HAVE_KOKKOS
   options_.enroll("data_storage", Ioss::GetLongOption::MandatoryValue,
                   "Data type used internally to store field data\n"
-                  "\t\tOptions are: POINTER, STD_VECTOR, KOKKOS_VIEW_1D, KOKKOS_VIEW_2D",
+                  "\t\tOptions are: POINTER, STD_VECTOR, KOKKOS_VIEW_1D, KOKKOS_VIEW_2D, "
+                  "KOKKOS_VIEW_2D_LAYOUTRIGHT_HOSTSPACE",
                   "POINTER");
 #else
   options_.enroll("data_storage", Ioss::GetLongOption::MandatoryValue,
@@ -199,6 +210,10 @@ void IOShell::Interface::enroll_options()
   options_.enroll("native_variable_names", Ioss::GetLongOption::NoValue,
                   "Do not lowercase variable names and replace spaces with underscores. Variable "
                   "names are left as they appear in the input mesh file",
+                  nullptr);
+
+  options_.enroll("delete_timesteps", Ioss::GetLongOption::NoValue,
+                  "Do not transfer any timesteps or transient data to the output database",
                   nullptr);
 
   options_.enroll("copyright", Ioss::GetLongOption::NoValue, "Show copyright and license data.",
@@ -235,6 +250,10 @@ bool IOShell::Interface::parse_options(int argc, char **argv)
 
   if (options_.retrieve("64-bit") != nullptr) {
     ints_64_bit = true;
+  }
+
+  if (options_.retrieve("32-bit") != nullptr) {
+    ints_32_bit = true;
   }
 
   if (options_.retrieve("float") != nullptr) {
@@ -292,6 +311,14 @@ bool IOShell::Interface::parse_options(int argc, char **argv)
   if (options_.retrieve("random") != nullptr) {
     decomp_method = "RANDOM";
   }
+
+  {
+    const char *temp = options_.retrieve("serialize_io_size");
+    if (temp != nullptr) {
+      serialize_io_size = std::strtol(temp, nullptr, 10);
+    }
+  }
+
 #endif
 
   if (options_.retrieve("external") != nullptr) {
@@ -306,6 +333,10 @@ bool IOShell::Interface::parse_options(int argc, char **argv)
     statistics = true;
   }
 
+  if (options_.retrieve("memory_statistics") != nullptr) {
+    memory_statistics = true;
+  }
+
   if (options_.retrieve("memory_read") != nullptr) {
     in_memory_read = true;
   }
@@ -316,6 +347,10 @@ bool IOShell::Interface::parse_options(int argc, char **argv)
 
   if (options_.retrieve("native_variable_names") != nullptr) {
     lower_case_variable_names = false;
+  }
+
+  if (options_.retrieve("delete_timesteps") != nullptr) {
+    delete_timesteps = true;
   }
 
   {
@@ -364,6 +399,9 @@ bool IOShell::Interface::parse_options(int argc, char **argv)
       else if (std::strcmp(temp, "ELEMENT_BLOCK") == 0) {
         surface_split_type = 2;
       }
+      else if (std::strcmp(temp, "BLOCK") == 0) {
+        surface_split_type = 2;
+      }
       else if (std::strcmp(temp, "NO_SPLIT") == 0) {
         surface_split_type = 3;
       }
@@ -387,14 +425,18 @@ bool IOShell::Interface::parse_options(int argc, char **argv)
       else if (std::strcmp(temp, "KOKKOS_VIEW_2D") == 0) {
         data_storage_type = 4;
       }
+      else if (std::strcmp(temp, "KOKKOS_VIEW_2D_LAYOUTRIGHT_HOSTSPACE") == 0) {
+        data_storage_type = 5;
+      }
 #endif
 
       if (data_storage_type == 0) {
-        std::cerr << "ERROR: Option data_storage must be one of" << std::endl;
+        std::cerr << "ERROR: Option data_storage must be one of\n";
 #ifdef SEACAS_HAVE_KOKKOS
-        std::cerr << "       POINTER, STD_VECTOR, KOKKOS_VIEW_1D, or KOKKOS_VIEW_2D" << std::endl;
+        std::cerr << "       POINTER, STD_VECTOR, KOKKOS_VIEW_1D, KOKKOS_VIEW_2D, or "
+                     "KOKKOS_VIEW_2D_LAYOUTRIGHT_HOSTSPACE\n";
 #else
-        std::cerr << "       POINTER, or STD_VECTOR" << std::endl;
+        std::cerr << "       POINTER, or STD_VECTOR\n";
 #endif
         return false;
       }
@@ -412,6 +454,20 @@ bool IOShell::Interface::parse_options(int argc, char **argv)
     const char *temp = options_.retrieve("Minimum_Time");
     if (temp != nullptr) {
       minimum_time = std::strtod(temp, nullptr);
+    }
+  }
+
+  {
+    const char *temp = options_.retrieve("append_after_time");
+    if (temp != nullptr) {
+      append_time = std::strtod(temp, nullptr);
+    }
+  }
+
+  {
+    const char *temp = options_.retrieve("append_after_step");
+    if (temp != nullptr) {
+      append_step = std::strtol(temp, nullptr, 10);
     }
   }
 

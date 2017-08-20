@@ -47,7 +47,7 @@
 #include <unordered_map>
 
 namespace stk {
-typedef std::pair<MessageId, std::string> MessageKey;
+  typedef std::pair<MessageId, std::string> MessageKey;
 }
 
 namespace std {
@@ -55,17 +55,17 @@ namespace std {
 template<>
 struct hash<stk::MessageKey>
 {
-    const size_t operator()(const stk::MessageKey& msgkey) const
+    size_t operator()(const stk::MessageKey& msgkey) const
     {
         return hash_messagekey(msgkey);
     }
-    const size_t operator()(const stk::MessageKey& msgkey1, const stk::MessageKey& msgkey2) const
+    size_t operator()(const stk::MessageKey& msgkey1, const stk::MessageKey& msgkey2) const
     {
         return hash_messagekey(msgkey1)^hash_messagekey(msgkey2);
     }
 
 private:
-    const size_t hash_messagekey(const stk::MessageKey& msgkey) const
+    size_t hash_messagekey(const stk::MessageKey& msgkey) const
     {
         return hash<stk::MessageId>()(msgkey.first + hash<std::string>()(msgkey.second));
     }
@@ -307,19 +307,6 @@ report_message(
   }
 }
 
-
-void
-reset_throttle_group(
-  int                   throttle_group)
-{
-  for (auto it = s_messageIdMap.begin(); it != s_messageIdMap.end(); ++it) {
-    if ((*it).second.m_group == throttle_group) {
-      (*it).second.m_count = 0;
-    }
-  }
-}
-
-
 void
 add_deferred_message(
   int                   message_type,
@@ -450,87 +437,6 @@ report_deferred_messages(
   s_deferredMessageVector.clear();
 #endif
 }
-
-
-void
-aggregate_messages(
-  MPI_Comm       comm,
-  std::ostringstream &  os,
-  const char *          separator)
-{
-#ifdef STK_HAS_MPI
-  std::string message = os.str();
-  os.str("");
-  
-  const int p_root = 0 ;
-  int p_size = stk::parallel_machine_size(comm);
-  int p_rank = stk::parallel_machine_rank(comm);
-  
-  int result =-1;
-
-  // Gather the send counts on root processor
-
-  int send_count = message.size();
-
-  std::vector<int> recv_count(p_size, 0);
-
-  int * const recv_count_ptr = recv_count.data() ;
-
-  result = MPI_Gather(& send_count, 1, MPI_INT,
-                      recv_count_ptr, 1, MPI_INT,
-                      p_root, comm);
-
-  if (MPI_SUCCESS != result) {
-    std::ostringstream s;
-    s << "stk::all_write FAILED: MPI_Gather = " << result ;
-    throw std::runtime_error(s.str());
-  }
-
-  // Receive counts are only non-zero on the root processor:
-  std::vector<int> recv_displ(p_size + 1, 0);
-
-  for (int i = 0 ; i < p_size ; ++i) {
-    recv_displ[i + 1] = recv_displ[i] + recv_count[i] ;
-  }
-
-  const int recv_size = recv_displ[ p_size ] ;
- 
-  std::vector<char> buffer(recv_size);
-
-  {
-    const char * const send_ptr = message.c_str();
-    char * const recv_ptr = recv_size ? buffer.data() : nullptr ;
-    int * const recv_displ_ptr = recv_displ.data() ;
-
-    result = MPI_Gatherv(const_cast<char*>(send_ptr), send_count, MPI_CHAR,
-                         recv_ptr, recv_count_ptr, recv_displ_ptr, MPI_CHAR,
-                         p_root, comm);
-  }
-
-  if (MPI_SUCCESS != result) {
-    std::ostringstream s ;
-    s << "stk::all_write FAILED: MPI_Gatherv = " << result ;
-    throw std::runtime_error(s.str());
-  }
-
-  if (p_root == static_cast<int>(p_rank)) {
-    bool first = true;
-    for (int i = 0 ; i < p_size ; ++i) {
-      if (recv_count[i]) {
-        if (!first)
-          os << separator;
-        first = false;
-        char * const ptr = & buffer[ recv_displ[i] ];
-        os.write(ptr, recv_count[i]);
-      }
-    }
-    os.flush();
-  } else {
-    os << message;
-  }
-#endif
-}
-
 
 std::ostream &
 operator<<(

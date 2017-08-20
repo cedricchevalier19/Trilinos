@@ -46,6 +46,7 @@ namespace BaskerNS
     //init_matrix (want to change these to malloc_matrix)
     BASKER_INLINE
     void init_matrix(string _label, Int _m, Int _n, Int _nnz);
+
     BASKER_INLINE
     void init_matrix(string _label, Int _m, Int _n, Int _nnz,
                     Int *_col_ptr, Int *_row_idx, Entry *_val);
@@ -87,7 +88,6 @@ namespace BaskerNS
     void init_inc_lvl();
 
 
-
     //****Deprecated*******
     BASKER_INLINE
     void malloc_perm(Int n);
@@ -126,8 +126,8 @@ namespace BaskerNS
 
     BASKER_BOOL v_fill;
 
-    Int srow, scol;
-    Int erow, ecol;
+    Int srow, scol; //start col (wrt global matrix, if a block)
+    Int erow, ecol; //end col (wrt global matrix, if a block)
     Int ncol, nrow, nnz;
     Int mnnz; //malloc nnz
     

@@ -67,6 +67,7 @@
 #include "Panzer_ResponseLibrary.hpp"
 #include "Panzer_ResponseEvaluatorFactory_Functional.hpp"
 #include "Panzer_Response_Functional.hpp"
+#include "Panzer_CheckBCConsistency.hpp"
 
 #include "PanzerAdaptersSTK_config.hpp"
 #include "Panzer_STK_WorksetFactory.hpp"
@@ -91,9 +92,9 @@
 #include "Example_ClosureModel_Factory_TemplateBuilder.hpp"
 #include "Example_EquationSetFactory.hpp"
 
-#include "Phalanx_KokkosUtilities.hpp"
-
 #include "AztecOO.h"
+
+#include <sstream>
 
 using Teuchos::RCP;
 using Teuchos::rcp;
@@ -139,10 +140,9 @@ using Teuchos::rcp;
 //      Out[145]= {2+y-y^2,2+x-x^2,0}
 //
 
-
 void testInitialization(const Teuchos::RCP<Teuchos::ParameterList>& ipb,
 		        std::vector<panzer::BC>& bcs,
-                        const std::string & eBlockName);
+                        const std::string & eBlockName,int basis_order);
 
 void solveEpetraSystem(panzer::LinearObjContainer & container);
 void solveTpetraSystem(panzer::LinearObjContainer & container);
@@ -156,7 +156,7 @@ int main(int argc,char * argv[])
    using panzer::StrPureBasisPair;
    using panzer::StrPureBasisComp;
 
-   PHX::KokkosDeviceSession session;
+   Kokkos::initialize(argc,argv);
 
    Teuchos::GlobalMPISession mpiSession(&argc,&argv);
    RCP<Epetra_Comm> Comm = Teuchos::rcp(new Epetra_MpiComm(MPI_COMM_WORLD));
@@ -172,6 +172,7 @@ int main(int argc,char * argv[])
    bool threeD = false;
    int x_elements=20,y_elements=20,z_elements=20;
    double x_size=1.,y_size=1.,z_size=1.;
+   int basis_order = 1;
    Teuchos::CommandLineProcessor clp;
    clp.setOption("use-tpetra","use-epetra",&useTpetra);
    clp.setOption("use-threed","use-twod",&threeD);
@@ -181,6 +182,7 @@ int main(int argc,char * argv[])
    clp.setOption("x-size",&x_size);
    clp.setOption("y-size",&y_size);
    clp.setOption("z-size",&z_size);
+   clp.setOption("basis-order",&basis_order);
 
    // parse commandline argument
    TEUCHOS_ASSERT(clp.parse(argc,argv)==Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL);
@@ -246,7 +248,7 @@ int main(int argc,char * argv[])
    {
       bool build_transient_support = false;
 
-      testInitialization(ipb, bcs, eBlockName);
+      testInitialization(ipb, bcs, eBlockName,basis_order);
       
       const panzer::CellData volume_cell_data(workset_size, mesh->getCellTopology(eBlockName));
 
@@ -300,6 +302,17 @@ int main(int argc,char * argv[])
       mesh_factory->completeMeshConstruction(*mesh,MPI_COMM_WORLD);
    }
 
+
+   // check that the bcs exist in the mesh
+   /////////////////////////////////////////////////////////////
+   {
+     std::vector<std::string> eBlockNames;
+     mesh->getElementBlockNames(eBlockNames);
+     std::vector<std::string> sidesetNames;
+     mesh->getSidesetNames(sidesetNames);
+     panzer::checkBCConsistency(eBlockNames,sidesetNames,bcs);
+   }
+
    // build DOF Manager and linear object factory
    /////////////////////////////////////////////////////////////
  
@@ -337,7 +350,11 @@ int main(int argc,char * argv[])
    Teuchos::RCP<panzer_stk::WorksetFactory> wkstFactory
       = Teuchos::rcp(new panzer_stk::WorksetFactory(mesh)); // build STK workset factory
    Teuchos::RCP<panzer::WorksetContainer> wkstContainer     // attach it to a workset container (uses lazy evaluation)
-      = Teuchos::rcp(new panzer::WorksetContainer(wkstFactory,physicsBlocks,workset_size));
+      = Teuchos::rcp(new panzer::WorksetContainer);
+   wkstContainer->setFactory(wkstFactory);
+   for(size_t i=0;i<physicsBlocks.size();i++) 
+     wkstContainer->setNeeds(physicsBlocks[i]->elementBlockID(),physicsBlocks[i]->getWorksetNeeds());
+   wkstContainer->setWorksetSize(workset_size);
    wkstContainer->setGlobalIndexer(dofManager);
 
    // Setup STK response library for writing out the solution fields
@@ -372,12 +389,20 @@ int main(int argc,char * argv[])
      mesh->getElementBlockNames(eBlocks);
 
      panzer::FunctionalResponse_Builder<int,int> builder;
+
      builder.comm = MPI_COMM_WORLD;
-     builder.cubatureDegree = 4;
+     builder.cubatureDegree = 10;
      builder.requiresCellIntegral = true;
      builder.quadPointField = "EFIELD_ERROR";
 
      errorResponseLibrary->addResponse("L2 Error",eBlocks,builder);
+
+     builder.comm = MPI_COMM_WORLD;
+     builder.cubatureDegree = 10;
+     builder.requiresCellIntegral = true;
+     builder.quadPointField = "EFIELD_HCURL_ERROR";
+
+     errorResponseLibrary->addResponse("HCurl Error",eBlocks,builder);
    }
 
    // setup closure model
@@ -394,9 +419,13 @@ int main(int argc,char * argv[])
         // SOURCE_EFIELD field is required by the CurlLaplacianEquationSet
 
      // required for error calculation
-     closure_models.sublist("solid").sublist("EFIELD_ERROR").set<std::string>("Type","ERROR_CALC");
+     closure_models.sublist("solid").sublist("EFIELD_ERROR").set<std::string>("Type","L2 ERROR_CALC");
      closure_models.sublist("solid").sublist("EFIELD_ERROR").set<std::string>("Field A","EFIELD");
      closure_models.sublist("solid").sublist("EFIELD_ERROR").set<std::string>("Field B","EFIELD_EXACT");
+
+     closure_models.sublist("solid").sublist("EFIELD_HCURL_ERROR").set<std::string>("Type","HCurl ERROR_CALC");
+     closure_models.sublist("solid").sublist("EFIELD_HCURL_ERROR").set<std::string>("Field A","EFIELD");
+     closure_models.sublist("solid").sublist("EFIELD_HCURL_ERROR").set<std::string>("Field B","EFIELD_EXACT");
 
      closure_models.sublist("solid").sublist("EFIELD_EXACT").set<std::string>("Type","EFIELD_EXACT");
      // closure_models.sublist("solid").sublist("EFIELD_EXACT").set<std::string>("Type","SIMPLE SOURCE");
@@ -491,8 +520,16 @@ int main(int argc,char * argv[])
       stkIOResponseLibrary->addResponsesToInArgs<panzer::Traits::Residual>(respInput);
       stkIOResponseLibrary->evaluate<panzer::Traits::Residual>(respInput);
 
-      // write to exodus
-      mesh->writeToExodus("output.exo");
+      // write to exodus 
+      // ---------------
+      // Due to multiple instances of this test being run at the same
+      // time (one for each order), we need to differentiate output to
+      // prevent race conditions on output file. Multiple runs for the
+      // same order are ok as they are staged one after another in the
+      // ADD_ADVANCED_TEST cmake macro.
+      std::ostringstream filename;
+      filename << "output_" << basis_order << ".exo";
+      mesh->writeToExodus(filename.str());
    }
 
    // compute error norm
@@ -506,25 +543,32 @@ int main(int argc,char * argv[])
       respInput.alpha = 0;
       respInput.beta = 1;
 
-      Teuchos::RCP<panzer::ResponseBase> resp = errorResponseLibrary->getResponse<panzer::Traits::Residual>("L2 Error");
-      Teuchos::RCP<panzer::Response_Functional<panzer::Traits::Residual> > resp_func = 
-             Teuchos::rcp_dynamic_cast<panzer::Response_Functional<panzer::Traits::Residual> >(resp);
-      Teuchos::RCP<Thyra::VectorBase<double> > respVec = Thyra::createMember(resp_func->getVectorSpace());
-      resp_func->setVector(respVec);
+      Teuchos::RCP<panzer::ResponseBase> l2_resp = errorResponseLibrary->getResponse<panzer::Traits::Residual>("L2 Error");
+      Teuchos::RCP<panzer::Response_Functional<panzer::Traits::Residual> > l2_resp_func = 
+            Teuchos::rcp_dynamic_cast<panzer::Response_Functional<panzer::Traits::Residual> >(l2_resp);
+      Teuchos::RCP<Thyra::VectorBase<double> > l2_respVec = Thyra::createMember(l2_resp_func->getVectorSpace());
+      l2_resp_func->setVector(l2_respVec);
+
+      Teuchos::RCP<panzer::ResponseBase> h1_resp = errorResponseLibrary->getResponse<panzer::Traits::Residual>("HCurl Error");
+      Teuchos::RCP<panzer::Response_Functional<panzer::Traits::Residual> > h1_resp_func = 
+            Teuchos::rcp_dynamic_cast<panzer::Response_Functional<panzer::Traits::Residual> >(h1_resp);
+      Teuchos::RCP<Thyra::VectorBase<double> > h1_respVec = Thyra::createMember(h1_resp_func->getVectorSpace());
+      h1_resp_func->setVector(h1_respVec);
 
       errorResponseLibrary->addResponsesToInArgs<panzer::Traits::Residual>(respInput);
       errorResponseLibrary->evaluate<panzer::Traits::Residual>(respInput);
-
-      lout << "Error = " << sqrt(resp_func->value) << std::endl;
+  
+      lout << "L2 Error = " << sqrt(l2_resp_func->value) << std::endl;
+      lout << "HCurl Error = " << sqrt(h1_resp_func->value) << std::endl;
    }
 
    // all done!
    /////////////////////////////////////////////////////////////
 
    if(useTpetra)
-      std::cout << "ALL PASSED: Tpetra" << std::endl;
+      out << "ALL PASSED: Tpetra" << std::endl;
    else
-      std::cout << "ALL PASSED: Epetra" << std::endl;
+      out << "ALL PASSED: Epetra" << std::endl;
 
    return 0;
 }
@@ -607,15 +651,15 @@ void solveTpetraSystem(panzer::LinearObjContainer & container)
 
 void testInitialization(const Teuchos::RCP<Teuchos::ParameterList>& ipb,
 		        std::vector<panzer::BC>& bcs,
-                        const std::string & eBlockName)
+                        const std::string & eBlockName,int basis_order)
 {
   {
     Teuchos::ParameterList& p = ipb->sublist("CurlLapacian Physics");
     p.set("Type","CurlLaplacian");
     p.set("Model ID","solid");
     p.set("Basis Type","HCurl");
-    p.set("Basis Order",1);
-    p.set("Integration Order",4);
+    p.set("Basis Order",basis_order);
+    p.set("Integration Order",10);
   }
   
   {

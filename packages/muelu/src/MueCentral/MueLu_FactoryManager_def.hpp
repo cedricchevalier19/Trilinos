@@ -92,6 +92,17 @@ namespace MueLu {
   }
 
   template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+  const RCP<FactoryBase> FactoryManager<Scalar, LocalOrdinal, GlobalOrdinal, Node>::GetFactoryNonConst(const std::string& varName) {
+    return Teuchos::rcp_const_cast<FactoryBase>(GetFactory(varName));
+  }
+
+  template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+  const bool FactoryManager<Scalar, LocalOrdinal, GlobalOrdinal, Node>::hasFactory(const std::string& varName) const {
+    if (factoryTable_.count(varName)) return true;
+    return false;
+  }
+
+  template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
   const RCP<const FactoryBase> FactoryManager<Scalar, LocalOrdinal, GlobalOrdinal, Node>::GetDefaultFactory(const std::string& varName) const {
     if (defaultFactoryTable_.count(varName)) {
       // The factory for this name was already created (possibly, for previous level, if we reuse factory manager)
@@ -165,6 +176,11 @@ namespace MueLu {
         return SetAndReturnDefaultFactory(varName, rcp(new SmootherFactory(rcp(new TrilinosSmoother("RELAXATION", smootherParamList)))));
       }
       if (varName == "CoarseSolver")                    return SetAndReturnDefaultFactory(varName, rcp(new SmootherFactory(rcp(new DirectSolver()), Teuchos::null)));
+
+#ifdef HAVE_MUELU_INTREPID2
+      // If we're asking for it, find who made P
+      if (varName == "pcoarsen: element to node map")                      return GetFactory("P");
+#endif
 
       TEUCHOS_TEST_FOR_EXCEPTION(true, MueLu::Exceptions::RuntimeError, "MueLu::FactoryManager::GetDefaultFactory(): No default factory available for building '" + varName + "'.");
     }

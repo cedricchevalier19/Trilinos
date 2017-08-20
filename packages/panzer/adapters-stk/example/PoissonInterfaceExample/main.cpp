@@ -50,8 +50,6 @@
 #include "Teuchos_DefaultComm.hpp"
 #include "Teuchos_GlobalMPISession.hpp"
 
-#include "Phalanx_KokkosUtilities.hpp"
-
 #include "PanzerAdaptersSTK_config.hpp"
 #include "Panzer_GlobalData.hpp"
 #include "Panzer_Workset_Builder.hpp"
@@ -388,7 +386,7 @@ int main (int argc, char* argv[])
   using panzer::StrPureBasisPair;
   using panzer::StrPureBasisComp;
 
-  PHX::InitializeKokkosDevice();
+  Kokkos::initialize(argc,argv);
 
   {
 
@@ -436,7 +434,7 @@ int main (int argc, char* argv[])
       try {
         clp.parse(argc, argv);
       } catch (...) {
-        PHX::FinalizeKokkosDevice();
+        Kokkos::finalize_all();
         return -1;
       }
   
@@ -497,7 +495,7 @@ int main (int argc, char* argv[])
       mesh_factory->completeMeshConstruction(*mesh, MPI_COMM_WORLD);
       mesh->writeToExodus("output.exo");
       out << "Stopping after writing mesh because --generate-mesh-only was requested.\n";
-      PHX::FinalizeKokkosDevice();
+      Kokkos::finalize_all();
       return 0;
     }
   
@@ -578,7 +576,11 @@ int main (int argc, char* argv[])
     Teuchos::RCP<panzer_stk::WorksetFactory> wkstFactory
       = Teuchos::rcp(new panzer_stk::WorksetFactory(mesh)); // build STK workset factory
     Teuchos::RCP<panzer::WorksetContainer> wkstContainer     // attach it to a workset container (uses lazy evaluation)
-      = Teuchos::rcp(new panzer::WorksetContainer(wkstFactory,physicsBlocks,workset_size));
+       = Teuchos::rcp(new panzer::WorksetContainer);
+    wkstContainer->setFactory(wkstFactory);
+    for(size_t i=0;i<physicsBlocks.size();i++) 
+      wkstContainer->setNeeds(physicsBlocks[i]->elementBlockID(),physicsBlocks[i]->getWorksetNeeds());
+    wkstContainer->setWorksetSize(workset_size);
   
     std::vector<std::string> elementBlockNames;
     mesh->getElementBlockNames(elementBlockNames);
@@ -818,8 +820,6 @@ int main (int argc, char* argv[])
     /////////////////////////////////////////////////////////////
     out << (pass ? "PASS" : "FAIL") << " BASICS\n";
   }
-
-  PHX::FinalizeKokkosDevice();
 
   return 0;
 }

@@ -66,7 +66,7 @@ ENDIF()
 
 # Index size type
 IF(NOT DEFINED ${PACKAGE_NAME}_INDEX_SIZE_TYPE)
-  SET(${PACKAGE_NAME}_INDEX_SIZE_TYPE "UINT")
+  SET(${PACKAGE_NAME}_INDEX_SIZE_TYPE "INT")
 ENDIF()
 
 IF(${PACKAGE_NAME}_INDEX_SIZE_TYPE STREQUAL "KOKKOS")
@@ -108,27 +108,6 @@ IF(${PACKAGE_NAME}_ENABLE_KOKKOS_AMT)
   MESSAGE(FATAL_ERROR "Phalanx configure ERROR: Kokkos AMT support is enabled but is not implemented for Pthreads execution space. Please change your execution space or disable AMT support in Phalanx.")
 ENDIF()
 ENDIF(${PACKAGE_NAME}_ENABLE_KOKKOS_AMT)
-
-TRIBITS_ADD_OPTION_AND_DEFINE(${PACKAGE_NAME}_ENABLE_KOKKOS_DYN_RANK_VIEW
-  PHX_ENABLE_KOKKOS_DYN_RANK_VIEW
-  "Enable the Kokkos EXPERIMENTAL DynRankView capability. Default is ON."
-  ON )
-MESSAGE(STATUS "Kokkos EXPERIMENTAL DynRankView support: ${PHX_ENABLE_KOKKOS_DYN_RANK_VIEW}")
-
-IF(${Intrepid2_ENABLE_KokkosDynRankView})
-  GLOBAL_SET(PHX_ENABLE_INTREPID2_DYN_RANK_VIEW_REFACTOR ON)
-  MESSAGE(STATUS "Use Intrepid2 refactor for DynRankView: ON")
-ELSE()
-  GLOBAL_SET(PHX_ENABLE_INTREPID2_DYN_RANK_VIEW_REFACTOR OFF)
-  MESSAGE(STATUS "Use Intrepid2 refactor for DynRankView: OFF")
-ENDIF()
-
-# Intrepid2 is an optional package
-IF(${PACKAGE_NAME}_ENABLE_Intrepid2)
-  MESSAGE(STATUS "Build MDField support for Intrepid2: ON")
-ELSE()
-  MESSAGE(STATUS "Build MDField support for Intrepid2: OFF")
-ENDIF()
 
 # For use by Phalanx and Panzer unit tests
 GLOBAL_SET(PHALANX_UNIT_TEST_MAIN

@@ -1,13 +1,13 @@
 /*
 //@HEADER
 // ************************************************************************
-// 
+//
 //                        Kokkos v. 2.0
 //              Copyright (2014) Sandia Corporation
-// 
+//
 // Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
 // the U.S. Government retains certain rights in this software.
-// 
+//
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -36,11 +36,12 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Questions? Contact  H. Carter Edwards (hcedwar@sandia.gov)
-// 
+//
 // ************************************************************************
 //@HEADER
 */
 
+#include <Kokkos_Macros.hpp>
 #if defined( KOKKOS_ATOMIC_HPP ) && ! defined( KOKKOS_ATOMIC_FETCH_SUB_HPP )
 #define KOKKOS_ATOMIC_FETCH_SUB_HPP
 
@@ -48,8 +49,8 @@ namespace Kokkos {
 
 //----------------------------------------------------------------------------
 
-#if defined( KOKKOS_HAVE_CUDA )
-#if defined(__CUDA_ARCH__) || defined(KOKKOS_CUDA_CLANG_WORKAROUND)
+#if defined( KOKKOS_ENABLE_CUDA )
+#if defined(__CUDA_ARCH__) || defined(KOKKOS_IMPL_CUDA_CLANG_WORKAROUND)
 
 // Support for int, unsigned int, unsigned long long int, and float
 
@@ -130,8 +131,8 @@ T atomic_fetch_sub( volatile T * const dest ,
 #endif
 #endif
 //----------------------------------------------------------------------------
-#if !defined(__CUDA_ARCH__) || defined(KOKKOS_CUDA_CLANG_WORKAROUND)
-#if defined(KOKKOS_ATOMICS_USE_GCC) || defined(KOKKOS_ATOMICS_USE_INTEL)
+#if !defined(__CUDA_ARCH__) || defined(KOKKOS_IMPL_CUDA_CLANG_WORKAROUND)
+#if defined(KOKKOS_ENABLE_GNU_ATOMICS) || defined(KOKKOS_ENABLE_INTEL_ATOMICS)
 
 inline
 int atomic_fetch_sub( volatile int * const dest , const int val )
@@ -141,7 +142,7 @@ inline
 long int atomic_fetch_sub( volatile long int * const dest , const long int val )
 { return __sync_fetch_and_sub(dest,val); }
 
-#if defined( KOKKOS_ATOMICS_USE_GCC )
+#if defined( KOKKOS_ENABLE_GNU_ATOMICS )
 
 inline
 unsigned int atomic_fetch_sub( volatile unsigned int * const dest , const unsigned int val )
@@ -210,7 +211,7 @@ T atomic_fetch_sub( volatile T * const dest ,
 
 //----------------------------------------------------------------------------
 
-#elif defined( KOKKOS_ATOMICS_USE_OMP31 )
+#elif defined( KOKKOS_ENABLE_OPENMP_ATOMICS )
 
 template< typename T >
 T atomic_fetch_sub( volatile T * const dest , const T val )
@@ -237,5 +238,4 @@ void atomic_sub(volatile T * const dest, const T src) {
 
 #include<impl/Kokkos_Atomic_Assembly.hpp>
 #endif
-
 
