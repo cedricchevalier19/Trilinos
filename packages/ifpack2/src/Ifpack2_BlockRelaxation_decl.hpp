@@ -1,7 +1,7 @@
 /*@HEADER
 // ***********************************************************************
 //
-//       Ifpack2: Tempated Object-Oriented Algebraic Preconditioner Package
+//       Ifpack2: Templated Object-Oriented Algebraic Preconditioner Package
 //                 Copyright (2009) Sandia Corporation
 //
 // Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
@@ -49,7 +49,7 @@
 #include "Ifpack2_Preconditioner.hpp"
 #include "Ifpack2_Partitioner.hpp"
 #include "Ifpack2_Details_CanChangeMatrix.hpp"
-#include "Ifpack2_Details_ContainerFactory.hpp"
+#include "Ifpack2_ContainerFactory.hpp"
 #include "Teuchos_Time.hpp"
 #include "Tpetra_Experimental_BlockCrsMatrix_decl.hpp"
 #include <type_traits>

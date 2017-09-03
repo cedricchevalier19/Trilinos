@@ -1,7 +1,7 @@
 /*@HEADER
 // ***********************************************************************
 //
-//       Ifpack2: Tempated Object-Oriented Algebraic Preconditioner Package
+//       Ifpack2: Templated Object-Oriented Algebraic Preconditioner Package
 //                 Copyright (2009) Sandia Corporation
 //
 // Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
@@ -129,6 +129,9 @@ setParameters (const Teuchos::ParameterList& List)
   if (List.isParameter ("relaxation: container")) {
     // If the container type isn't a string, this will throw, but it
     // rightfully should.
+
+    // If its value does not match the currently registered Container types,
+    // the ContainerFactory will throw with an informative message.
     containerType_ = List.get<std::string> ("relaxation: container");
   }
 
@@ -677,9 +680,7 @@ ExtractSubmatrices ()
       localRows[i][j] = (*Partitioner_) (i,j);
     }
   }
-  Container_ = Teuchos::rcp_static_cast<Container<MatrixType>>
-    (Details::createContainer<row_matrix_type> (containerType, A_, localRows, Importer_,
-      OverlapLevel_, DampingFactor_));
+  Container_ = ContainerFactory<MatrixType>::build(containerType, A_, localRows, Importer_, OverlapLevel_, DampingFactor_);
   Container_->setParameters(List_);
   Container_->initialize();
   Container_->compute();   //initialize + compute each block matrix

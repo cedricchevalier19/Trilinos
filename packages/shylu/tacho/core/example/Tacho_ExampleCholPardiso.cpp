@@ -1,5 +1,3 @@
-#include "Teuchos_CommandLineProcessor.hpp"
-
 #include "ShyLUTacho_config.h"
 
 #include <Kokkos_Core.hpp>
@@ -9,37 +7,33 @@
 #include "TachoExp_CrsMatrixBase.hpp"
 #include "TachoExp_MatrixMarket.hpp"
 
-#ifdef HAVE_SHYLUTACHO_MKL
+#include "TachoExp_NumericTools.hpp"
+
+#include "TachoExp_CommandLineParser.hpp"
+
+#ifdef TACHO_HAVE_MKL
 #include "mkl_service.h"
-#include "Tacho_ExamplePardiso.hpp"
+#include "Tacho_Pardiso.hpp"
 #endif
 
 using namespace Tacho;
 using namespace Tacho::Experimental;
 
 int main (int argc, char *argv[]) {
-  Teuchos::CommandLineProcessor clp;
-  clp.setDocString("This example program measure the performance of Pardiso Chol algorithms on Kokkos::OpenMP execution space.\n");
+  CommandLineParser opts("This example program measure the performance of Pardiso on Kokkos::OpenMP");
 
   int nthreads = 1;
-  clp.setOption("kokkos-threads", &nthreads, "Number of threads");
-
-  bool verbose = false;
-  clp.setOption("enable-verbose", "disable-verbose", &verbose, "Flag for verbose printing");
-
+  bool verbose = true;
   std::string file_input = "test.mtx";
-  clp.setOption("file", &file_input, "Input file (MatrixMarket SPD matrix)");
-
   int nrhs = 1;
-  clp.setOption("nrhs", &nrhs, "Number of RHS vectors");
 
-  clp.recogniseAllOptions(true);
-  clp.throwExceptions(false);
+  opts.set_option<int>("kokkos-threads", "Number of threads", &nthreads);
+  opts.set_option<bool>("verbose", "Flag for verbose printing", &verbose);
+  opts.set_option<std::string>("file", "Input file (MatrixMarket SPD matrix)", &file_input);
+  opts.set_option<int>("nrhs", "Number of RHS vectors", &nrhs);
 
-  Teuchos::CommandLineProcessor::EParseCommandLineReturn r_parse= clp.parse( argc, argv );
-
-  if (r_parse == Teuchos::CommandLineProcessor::PARSE_HELP_PRINTED) return 0;
-  //if (r_parse != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL  ) return -1;
+  const bool r_parse = opts.parse(argc, argv);
+  if (r_parse) return 0; // print help return
 
   const bool skip_factorize = false, skip_solve = false;
   
@@ -47,7 +41,7 @@ int main (int argc, char *argv[]) {
   Kokkos::DefaultHostExecutionSpace::print_configuration(std::cout, false);
 
   int r_val = 0;
-#ifdef HAVE_SHYLUTACHO_MKL
+#ifdef TACHO_HAVE_MKL
   {
     typedef double value_type;
     typedef CrsMatrixBase<value_type> CrsMatrixBaseType;
@@ -76,7 +70,7 @@ int main (int argc, char *argv[]) {
     std::cout << "PardisoChol:: init ::time = " << t << std::endl;
     
     std::cout << "PardisoChol:: import input file = " << file_input << std::endl;
-    CrsMatrixBaseType A("A");
+    CrsMatrixBaseType A("A"), Asym("Asym");
     timer.reset();
     {
       {
@@ -89,70 +83,55 @@ int main (int argc, char *argv[]) {
       }
       A = MatrixMarket<value_type>::read(file_input);
       
-      // somehow pardiso does not like symmetric matrix
-      CrsMatrixBaseType Atmp("Atmp");
-      Atmp.createConfTo(A);
+      // somehow pardiso does not like symmetric full matrix (store only half)
+      Asym.createConfTo(A);
       {
         size_type nnz = 0;
         for (ordinal_type i=0;i<A.NumRows();++i) {
-          Atmp.RowPtrBegin(i) = nnz;
+          Asym.RowPtrBegin(i) = nnz;
           for (ordinal_type idx=A.RowPtrBegin(i);idx<A.RowPtrEnd(i);++idx) {
             if (i <= A.Col(idx)) {
-              Atmp.Col(nnz) = A.Col(idx);
-              Atmp.Value(nnz) = A.Value(idx);
+              Asym.Col(nnz) = A.Col(idx);
+              Asym.Value(nnz) = A.Value(idx);
               ++nnz;
             }
           }
-          Atmp.RowPtrEnd(i) = nnz;
+          Asym.RowPtrEnd(i) = nnz;
         }
       }
-      A = Atmp;
     }
     t = timer.seconds();
 
     // 32bit vs 64bit integers; A uses size_t for size array
-    Kokkos::View<ordinal_type*,Kokkos::DefaultHostExecutionSpace> rowptr("rowptr", A.NumRows()+1);
+    Kokkos::View<ordinal_type*,Kokkos::DefaultHostExecutionSpace> rowptr("rowptr", Asym.NumRows()+1);
     {      
-      for (ordinal_type i=0;i<=A.NumRows();++i)
-        rowptr(i) = A.RowPtrBegin(i);
+      for (ordinal_type i=0;i<=Asym.NumRows();++i)
+        rowptr(i) = Asym.RowPtrBegin(i);
     }    
     std::cout << "PardisoChol:: import input file::time = " << t << std::endl;
     
     DenseMatrixBaseType 
-      BB("BB", A.NumRows(), nrhs), 
-      XX("XX", A.NumRows(), nrhs), 
-      RR("RR", A.NumRows(), nrhs),
-      PP("PP",  A.NumRows(), 1);
+      B("B", Asym.NumRows(), nrhs), 
+      X("X", Asym.NumRows(), nrhs), 
+      P("P", Asym.NumRows(), 1);
     
     {
-      const auto m = A.NumRows();
-      srand(time(NULL));
-      for (ordinal_type rhs=0;rhs<nrhs;++rhs) {
+      const auto m = Asym.NumRows();
+      Random<value_type> random;
+      for (ordinal_type rhs=0;rhs<nrhs;++rhs) 
         for (ordinal_type i=0;i<m;++i) 
-          XX(i, rhs) = ((value_type)rand()/(RAND_MAX));
-        
-        // matvec
-        Kokkos::DefaultHostExecutionSpace::fence();
-        Kokkos::parallel_for(Kokkos::RangePolicy<Kokkos::DefaultHostExecutionSpace>(0, m),
-                             [&](const ordinal_type i) {
-                               value_type tmp = 0;
-                               for (ordinal_type j=A.RowPtrBegin(i);j<A.RowPtrEnd(i);++j)
-                                 tmp += A.Value(j)*XX(A.Col(j), rhs);
-                               BB(i, rhs) = tmp;
-                             } );
-        Kokkos::DefaultHostExecutionSpace::fence();
-      }
-      Kokkos::deep_copy(RR, XX);
+          B(i, rhs) = random.value();
+      Kokkos::deep_copy(X, B);
     }
-
-    pardiso.setProblem(A.NumRows(),
-                       (double*)A.Values().data(),
-                       (int*)rowptr.data(),// (int*)A.RowPtr().data(),
-                       (int*)A.Cols().data(),
-                       (int*)PP.data(),
+    
+    pardiso.setProblem(Asym.NumRows(),
+                       (double*)Asym.Values().data(),
+                       (int*)rowptr.data(),// (int*)Asym.RowPtr().data(),
+                       (int*)Asym.Cols().data(),
+                       (int*)P.data(),
                        nrhs,
-                       (double*)BB.data(),
-                       (double*)XX.data());
+                       (double*)B.data(),
+                       (double*)X.data());
     
     std::cout << "PardisoChol:: analyze matrix" << std::endl;
     {
@@ -204,29 +183,16 @@ int main (int argc, char *argv[]) {
     }
     
     {
-      double error = 0, norm = 0;
-      const auto m = A.NumRows();
-      for (ordinal_type rhs=0;rhs<nrhs;++rhs) {
-        for (ordinal_type i=0;i<m;++i) {
-          {
-            const auto val = std::abs(XX(i, rhs) - RR(i, rhs));
-            error += val*val;
-          }
-          {
-            const auto val = std::abs(RR(i, rhs));
-            norm  += val*val;
-          }
-        }
-      }
-      std::cout << "PardisoChol:: error = " << error << " , norm = " << norm << std::endl;
+      const double res = NumericTools<value_type,Kokkos::DefaultHostExecutionSpace>::computeRelativeResidual(A, X, B);
+      std::cout << "PardisoChol:: residual = " << res << std::endl;
     }
-
+    
     std::cout << "PardisoChol:: release all" << std::endl;
     {
       timer.reset();
       r_val = pardiso.run(Pardiso::ReleaseAll);
       t = timer.seconds();
-
+      
       if (r_val) {
         std::cout << "PardisoChol:: release error = " << r_val << std::endl;
         pardiso.showErrorCode(std::cout) << std::endl;
@@ -238,7 +204,7 @@ int main (int argc, char *argv[]) {
   }
 #else
   r_val = -1;
-  cout << "MKL is NOT configured in Trilinos" << endl;
+  std::cout << "MKL is NOT configured in Trilinos" << endl;
 #endif
   
   Kokkos::finalize();

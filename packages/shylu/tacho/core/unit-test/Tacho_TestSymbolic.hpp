@@ -13,11 +13,11 @@
 #include "TachoExp_Graph.hpp"
 #include "TachoExp_SymbolicTools.hpp"
 
-#if defined(HAVE_SHYLUTACHO_SCOTCH)
+#if defined(TACHO_HAVE_SCOTCH)
 #include "TachoExp_GraphTools_Scotch.hpp"
 #endif
 
-#if defined(HAVE_SHYLUTACHO_METIS)
+#if defined(TACHO_HAVE_METIS)
 #include "TachoExp_GraphTools_Metis.hpp"
 #endif
 
@@ -58,14 +58,15 @@ TEST( Symbolic, constructor ) {
 }
 
 TEST( Symbolic, functions ) {
+  std::string inputfilename = MM_TEST_FILE + ".mtx";
   CrsMatrixBaseHostType A("A");
-  A = MatrixMarket<ValueType>::read("test.mtx");
+  A = MatrixMarket<ValueType>::read(inputfilename);
 
   Graph G(A);
 
-#if   defined(HAVE_SHYLUTACHO_METIS)
+#if   defined(TACHO_HAVE_METIS)
   GraphTools_Metis T(G);
-#elif defined(HAVE_SHYLUTACHO_SCOTCH)
+#elif defined(TACHO_HAVE_SCOTCH)
   GraphTools_Scotch T(G);
 #else
   GraphTools_CAMD T(G);
@@ -98,12 +99,12 @@ TEST( Symbolic, functions ) {
   SymbolicTools::computeFillPatternUpper(m, ap, aj, perm, peri, up, uj, work);
 
   ordinal_type_array supernodes;
-  SymbolicTools::computeSuperNodes(m, ap, aj, perm, peri, parent, supernodes, work);
+  SymbolicTools::computeSupernodes(m, ap, aj, perm, peri, parent, supernodes, work);
 
   // allocate supernodes
   size_type_array gid_super_panel_ptr, sid_super_panel_ptr;
   ordinal_type_array gid_super_panel_colidx, sid_super_panel_colidx, blk_super_panel_colidx;
-  SymbolicTools::allocateSuperNodes(m, up, uj, supernodes, work,
+  SymbolicTools::allocateSupernodes(m, up, uj, supernodes, work,
                                     gid_super_panel_ptr,
                                     gid_super_panel_colidx,
                                     sid_super_panel_ptr,
@@ -111,17 +112,18 @@ TEST( Symbolic, functions ) {
                                     blk_super_panel_colidx);
 
   size_type_array stree_ptr;
-  ordinal_type_array stree_children, stree_roots;
-  SymbolicTools::computeSuperNodesAssemblyTree(parent,
+  ordinal_type_array stree_parent, stree_children, stree_roots;
+  SymbolicTools::computeSupernodesAssemblyTree(parent,
                                                supernodes,
+                                               stree_parent,
                                                stree_ptr,
                                                stree_children,
                                                stree_roots,
                                                work);
 
-  // const size_type numSuperNodes = supernodes.dimension_0() - 1;
+  // const size_type numSupernodes = supernodes.dimension_0() - 1;
   // printf("supernodes = \n");
-  // for (size_type i=0;i<numSuperNodes;++i) {
+  // for (size_type i=0;i<numSupernodes;++i) {
   //   printf("sid=  %d\n", supernodes(i));
   //   printf("-- gid = \n");
   //   for (size_type j=gid_super_panel_ptr(i);j<gid_super_panel_ptr(i+1);++j)
@@ -140,14 +142,16 @@ TEST( Symbolic, functions ) {
 }
 
 TEST( Symbolic, interface ) {
+  std::string inputfilename = MM_TEST_FILE + ".mtx";
+
   CrsMatrixBaseHostType A("A");
-  A = MatrixMarket<ValueType>::read("test.mtx");
+  A = MatrixMarket<ValueType>::read(inputfilename);
 
   Graph G(A);
 
-#if   defined(HAVE_SHYLUTACHO_METIS)
+#if   defined(TACHO_HAVE_METIS)
   GraphTools_Metis T(G);
-#elif defined(HAVE_SHYLUTACHO_SCOTCH)
+#elif defined(TACHO_HAVE_SCOTCH)
   GraphTools_Scotch T(G);
 #else
   GraphTools_CAMD T(G);

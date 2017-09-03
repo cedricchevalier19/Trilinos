@@ -2,7 +2,7 @@
 //@HEADER
 // ***********************************************************************
 //
-//       Ifpack2: Tempated Object-Oriented Algebraic Preconditioner Package
+//       Ifpack2: Templated Object-Oriented Algebraic Preconditioner Package
 //                 Copyright (2009) Sandia Corporation
 //
 // Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
@@ -78,11 +78,13 @@ TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL(Ifpack2Amesos2Wrapper, Test0, Scalar, LO, GO)
   typedef Tpetra::Map<LO,GO,Node> map_type;
   typedef Tpetra::CrsMatrix<Scalar,LO,GO,Node> crs_matrix_type;
   typedef Tpetra::RowMatrix<Scalar,LO,GO,Node> row_matrix_type;
+  #ifdef HAVE_AMESOS2_SUPERLU
   typedef Tpetra::MultiVector<Scalar,LO,GO,Node> mv_type;
   typedef typename mv_type::impl_scalar_type val_type;
   typedef typename Kokkos::Details::ArithTraits<val_type>::mag_type mag_type;
   typedef typename map_type::device_type device_type;
-  // const mag_type oneMag = ArithTraits<mag_type>::one (); // unused
+  //const mag_type oneMag = ArithTraits<mag_type>::one ();
+  #endif
 
   out << "Ifpack2 Amesos2 wrapper: Test0" << endl;
   Teuchos::OSTab tab1 (out);
