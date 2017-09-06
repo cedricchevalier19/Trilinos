@@ -84,7 +84,6 @@ main (int argc, char *argv[])
   //
   // Other typedefs.
   //
-  typedef Teuchos::ScalarTraits<scalar_type> STS;
   typedef Tpetra::CrsMatrix<scalar_type, local_ordinal_type, global_ordinal_type> sparse_matrix_type;
   typedef MV::node_type node_type;
 
@@ -107,7 +106,7 @@ main (int argc, char *argv[])
   //
   // CommandLineProcessor always understands int, but may not
   // understand global_ordinal_type.  We convert to the latter below.
-  int numRows = comm->getSize() * 100;
+  int numRows = comm->getSize() * 5;
   bool tolerant = false;
   bool verbose = false;
   bool debug = false;
@@ -176,8 +175,8 @@ main (int argc, char *argv[])
   TEUCHOS_TEST_FOR_EXCEPTION(B.is_null(), std::logic_error,
                              "The right-hand side B is null!");
 
-
-  
+  Tpetra::MatrixMarket::Writer<sparse_matrix_type> writer;
+  writer.writeOperator(std::cerr, *A);
   // Approximate solution vector is a copy of the guess vector.
   RCP<MV> X (new MV (*X_guess));
 

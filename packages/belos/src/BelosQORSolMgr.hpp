@@ -493,13 +493,13 @@ template<class ScalarType, class MV, class OP>
 const int QORSolMgr<ScalarType,MV,OP>::maxRestarts_default_ = 20;
 
 template<class ScalarType, class MV, class OP>
-const int QORSolMgr<ScalarType,MV,OP>::maxIters_default_ = 1000;
+const int QORSolMgr<ScalarType,MV,OP>::maxIters_default_ = 20;
 
 template<class ScalarType, class MV, class OP>
 const bool QORSolMgr<ScalarType,MV,OP>::showMaxResNormOnly_default_ = false;
 
 template<class ScalarType, class MV, class OP>
-const int QORSolMgr<ScalarType,MV,OP>::numBlocks_default_ = 300;
+const int QORSolMgr<ScalarType,MV,OP>::numBlocks_default_ = 20;
 
 template<class ScalarType, class MV, class OP>
 const int QORSolMgr<ScalarType,MV,OP>::verbosity_default_ = Belos::Errors;
