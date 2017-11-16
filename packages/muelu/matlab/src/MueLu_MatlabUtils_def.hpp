@@ -571,8 +571,8 @@ RCP<MAggregates> loadDataFromMatlab<RCP<MAggregates>>(const mxArray* mxa)
   {
     agg->SetIsRoot(rootNodes_inArray[i], true);
   }
-  //Now recompute the aggSize array and cache the results in the object
-  agg->ComputeAggregateSizes(true, true);
+  //Now recompute the aggSize array the results in the object
+  agg->ComputeAggregateSizes(true);
   agg->AggregatesCrossProcessors(false);
   return agg;
 }
@@ -673,11 +673,7 @@ RCP<FieldContainer_ordinal> loadDataFromMatlab<RCP<FieldContainer_ordinal>>(cons
   int nr = mxGetM(mxa);
   int nc = mxGetN(mxa);
 
-#ifdef HAVE_MUELU_INTREPID2_REFACTOR 
   RCP<FieldContainer_ordinal> fc = rcp(new FieldContainer_ordinal("FC from Matlab",nr,nc));
-#else
-  RCP<FieldContainer_ordinal> fc = rcp(new FieldContainer_ordinal(nr,nc));
-#endif
   for(int col = 0; col < nc; col++)
   {
     for(int row = 0; row < nr; row++)
@@ -799,11 +795,13 @@ template<>
 mxArray* saveDataToMatlab(RCP<Xpetra_Matrix_double>& data)
 {
   typedef double Scalar;
+  // Compute global constants, if we need them
+  Teuchos::rcp_const_cast<Xpetra_CrsGraph>(data->getCrsGraph())->computeGlobalConstants();
+
   int nr = data->getGlobalNumRows();
   int nc = data->getGlobalNumCols();
   int nnz = data->getGlobalNumEntries();
 
-  if(nnz==-1) nnz=data->getNodeNumEntries(); // Workaround for global constants stuff.
 #ifdef VERBOSE_OUTPUT
   RCP<Teuchos::FancyOStream> fancyStream = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::cout));
   mat->describe(*fancyStream, Teuchos::VERB_EXTREME);
@@ -916,6 +914,10 @@ template<>
 mxArray* saveDataToMatlab(RCP<Xpetra_Matrix_complex>& data)
 {
   typedef complex_t Scalar;
+
+  // Compute global constants, if we need them
+  Teuchos::rcp_const_cast<Xpetra_CrsGraph>(data->getCrsGraph())->computeGlobalConstants();
+
   int nr = data->getGlobalNumRows();
   int nc = data->getGlobalNumCols();
   int nnz = data->getGlobalNumEntries();

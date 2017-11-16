@@ -12,6 +12,7 @@
 #include "Teuchos_ParameterList.hpp"
 #include "Tempus_StepperForwardEuler.hpp"
 #include "Tempus_StepperBackwardEuler.hpp"
+#include "Tempus_StepperBDF2.hpp"
 #include "Tempus_StepperNewmarkImplicitAForm.hpp"
 #include "Tempus_StepperNewmarkImplicitDForm.hpp"
 #include "Tempus_StepperNewmarkExplicitAForm.hpp"
@@ -19,6 +20,8 @@
 #include "Tempus_StepperExplicitRK.hpp"
 #include "Tempus_StepperDIRK.hpp"
 #include "Tempus_StepperIMEX_RK.hpp"
+#include "Tempus_StepperIMEX_RK_Partition.hpp"
+#include "Tempus_StepperLeapfrog.hpp"
 
 
 namespace Tempus {
@@ -69,6 +72,8 @@ private:
       return rcp(new StepperForwardEuler<Scalar>(model, stepperPL));
     else if (stepperType == "Backward Euler")
       return rcp(new StepperBackwardEuler<Scalar>(model, stepperPL));
+    else if (stepperType == "BDF2")
+      return rcp(new StepperBDF2<Scalar>(model, stepperPL));
     else if (stepperType == "Newmark Implicit a-Form")
       return rcp(new StepperNewmarkImplicitAForm<Scalar>(model, stepperPL));
     else if (stepperType == "Newmark Implicit d-Form")
@@ -135,6 +140,15 @@ private:
       stepperType == "IMEX RK ARS 233"   ||
       stepperType == "General IMEX RK" )
       return rcp(new StepperIMEX_RK<Scalar>(model, stepperType, stepperPL));
+    else if (
+      stepperType == "Partitioned IMEX RK 1st order" ||
+      stepperType == "Partitioned IMEX RK SSP2"      ||
+      stepperType == "Partitioned IMEX RK ARS 233"   ||
+      stepperType == "General Partitioned IMEX RK" )
+      return rcp(new StepperIMEX_RK_Partition<Scalar>(
+                        model, stepperType, stepperPL));
+    else if (stepperType == "Leapfrog")
+      return rcp(new StepperLeapfrog<Scalar>(model, stepperPL));
     else {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error,
         "Unknown 'Stepper Type' = " << stepperType);

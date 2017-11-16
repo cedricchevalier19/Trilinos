@@ -89,9 +89,12 @@ namespace PHX {
     void bindField(const PHX::FieldTag& f, const PHX::any& a);
 
     void postRegistrationSetup(typename Traits::SetupData d,
-			       PHX::FieldManager<Traits>& fm);
+			       PHX::FieldManager<Traits>& fm,
+                               const bool& buildDeviceDAG);
 
     void evaluateFields(typename Traits::EvalData d);
+
+    void evaluateFieldsDeviceDag(const int& work_size, typename Traits::EvalData d);
 
 #ifdef PHX_ENABLE_KOKKOS_AMT
     /*! \brief Evaluate the fields using hybrid functional (asynchronous multi-tasking) and data parallelism.
@@ -123,7 +126,7 @@ namespace PHX {
     /*! Build the DAG. This is automatically called by the
         postRegistrationSetup() method. This function is a power user
         feature that allows for cases where the user would like to
-        build the dag and query it to use information form the DAG
+        build the dag and query it to use information from the DAG
         prior to allocating and binding the memory to fields.
      */
     void buildDag();
@@ -151,6 +154,8 @@ namespace PHX {
     std::unordered_map<std::string,std::string> aliased_fields_;
     
     std::vector<PHX::index_size_type> kokkos_extended_data_type_dimensions_;
+
+    bool build_device_dag_;
   };
   
 } 

@@ -58,7 +58,7 @@
 #include "MatrixMarket_Tpetra.hpp"
 #include "Tpetra_RowMatrixTransposer.hpp"
 #include <cmath>
-#include "KokkosKernels_SPGEMM.hpp"
+#include "KokkosSparse_spgemm.hpp"
 #include "Tpetra_RowMatrixTransposer.hpp"
 #include "Tpetra_Import_Util2.hpp"
 
@@ -339,7 +339,7 @@ mult_test_results multiply_test_kernel(
   RCP<const Map_t> map = C->getRowMap();
   LO LO_INVALID = Teuchos::OrdinalTraits<LO>::invalid();
 
-  SC one = Teuchos::ScalarTraits<SC>::one();
+  // SC one = Teuchos::ScalarTraits<SC>::one();
   mult_test_results results;
 
   // Transposes
@@ -424,7 +424,7 @@ mult_test_results multiply_test_kernel(
     std::string myalg = ALGORITHMS[alg];
     printf("Testing algorithm %s on %s\n",myalg.c_str(),name.c_str());
     
-    KokkosKernels::Experimental::Graph::SPGEMMAlgorithm alg_enum = KokkosKernels::Experimental::Graph::StringToSPGEMMAlgorithm(myalg);
+    KokkosSparse::SPGEMMAlgorithm alg_enum = KokkosSparse::StringToSPGEMMAlgorithm(myalg);
     typename KernelHandle::nnz_lno_t AnumRows = Ak.numRows();
     typename KernelHandle::nnz_lno_t BnumRows = Bk.numRows();
     typename KernelHandle::nnz_lno_t BnumCols = Bk.numCols();  
@@ -435,7 +435,7 @@ mult_test_results multiply_test_kernel(
     kh.create_spgemm_handle(alg_enum);
     
     // Symbolic
-    KokkosKernels::Experimental::Graph::spgemm_symbolic(&kh,AnumRows,BnumRows,BnumCols,Ak.graph.row_map,Ak.graph.entries,false,Bk.graph.row_map,Bk.graph.entries,false,row_mapC);
+    KokkosSparse::Experimental::spgemm_symbolic(&kh,AnumRows,BnumRows,BnumCols,Ak.graph.row_map,Ak.graph.entries,false,Bk.graph.row_map,Bk.graph.entries,false,row_mapC);
     size_t c_nnz_size = kh.get_spgemm_handle()->get_c_nnz();
     //    printf("DEBUG: c_nnz_size = %d\n",c_nnz_size); // This isn't relevant for MKL
     if (c_nnz_size){
@@ -444,7 +444,7 @@ mult_test_results multiply_test_kernel(
     }
     
     // Numeric
-    KokkosKernels::Experimental::Graph::spgemm_numeric(&kh,AnumRows,BnumRows,BnumCols,Ak.graph.row_map,Ak.graph.entries,Ak.values,false,Bk.graph.row_map,Bk.graph.entries,Bk.values,false,row_mapC,entriesC,valuesC);
+    KokkosSparse::Experimental::spgemm_numeric(&kh,AnumRows,BnumRows,BnumCols,Ak.graph.row_map,Ak.graph.entries,Ak.values,false,Bk.graph.row_map,Bk.graph.entries,Bk.values,false,row_mapC,entriesC,valuesC);
     kh.destroy_spgemm_handle();
     
     // Sort
@@ -811,12 +811,16 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Tpetra_MatMatKernels, operations_test,SC,LO, G
     double epsilon = currentSystem.get<double> ("epsilon", defaultEpsilon);
     std::string op = currentSystem.get<std::string> ("op");
 
-    RCP<Matrix_t> A = Reader<Matrix_t>::readSparseFile (A_file, comm);
-    RCP<Matrix_t> B = Reader<Matrix_t>::readSparseFile (B_file, comm);
-    RCP<Matrix_t> C = Reader<Matrix_t>::readSparseFile (C_file, comm);
+    RCP<Matrix_t> A, B, C;
+    if (A_file != "")
+      A = Reader<Matrix_t>::readSparseFile (A_file, comm);
+    if (B_file != "")
+      B = Reader<Matrix_t>::readSparseFile (B_file, comm);
+    if (C_file != "")
+      C = Reader<Matrix_t>::readSparseFile (C_file, comm);
 
-    TEUCHOS_TEST_FOR_EXCEPTION(op != "multiply" && op != "add", std::runtime_error,
-      "Unrecognized Matrix Operation: " << op);
+    TEUCHOS_TEST_FOR_EXCEPTION(op != "multiply" && op != "add" && op != "RAP", std::runtime_error,
+                               "Unrecognized Matrix Operation: " << op);
 
     if (op == "multiply") {
       if (verbose)

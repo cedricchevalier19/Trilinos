@@ -43,11 +43,17 @@
 #define KOKKOS_DEFAULTNODE_HPP
 
 #include "Kokkos_ConfigDefs.hpp"
-#include "Kokkos_NodeAPIConfigDefs.hpp"
 #include "KokkosClassic_DefaultNode_config.h"
 #include "KokkosCompat_ClassicNodeAPI_Wrapper.hpp"
-#include "Teuchos_ParameterList.hpp"
 #include "Teuchos_RCP.hpp"
+
+#ifndef DOXYGEN_SHOULD_SKIP_THIS
+namespace Teuchos {
+  // Dear users: This is just a forward declaration.
+  // Please skip over it.
+  class ParameterList;
+} // namespace Teuchos
+#endif // DOXYGEN_SHOULD_SKIP_THIS
 
 namespace KokkosClassic {
 
@@ -72,24 +78,34 @@ namespace Details {
   /// This is true for all the Node types implemented in Kokkos.
   template<class NodeType>
   Teuchos::RCP<NodeType>
-  getNode (const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null) {
-    static Teuchos::RCP<NodeType> theNode;
-    if (theNode.is_null ()) {
-      if (params.is_null ()) {
-        Teuchos::ParameterList defaultParams;
-        theNode = Teuchos::rcp (new NodeType (defaultParams));
-      } else {
-        theNode = Teuchos::rcp (new NodeType (*params));
-      }
-    }
-    return theNode;
-  }
+  getNode (const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null);
+
+#ifdef KOKKOS_ENABLE_CUDA
+  extern template Teuchos::RCP< ::Kokkos::Compat::KokkosCudaWrapperNode> getNode< ::Kokkos::Compat::KokkosCudaWrapperNode> (const Teuchos::RCP<Teuchos::ParameterList>& );
+#endif // KOKKOS_ENABLE_CUDA
+
+#ifdef KOKKOS_ENABLE_OPENMP
+  extern template Teuchos::RCP< ::Kokkos::Compat::KokkosOpenMPWrapperNode> getNode< ::Kokkos::Compat::KokkosOpenMPWrapperNode> (const Teuchos::RCP<Teuchos::ParameterList>& );
+#endif // KOKKOS_ENABLE_OPENMP
+
+#ifdef KOKKOS_ENABLE_SERIAL
+  extern template Teuchos::RCP< ::Kokkos::Compat::KokkosSerialWrapperNode> getNode< ::Kokkos::Compat::KokkosSerialWrapperNode> (const Teuchos::RCP<Teuchos::ParameterList>& );
+#endif // KOKKOS_ENABLE_SERIAL
+
+#ifdef KOKKOS_ENABLE_PTHREAD
+  extern template Teuchos::RCP< ::Kokkos::Compat::KokkosThreadsWrapperNode> getNode< ::Kokkos::Compat::KokkosThreadsWrapperNode> (const Teuchos::RCP<Teuchos::ParameterList>& );
+#endif // KOKKOS_ENABLE_PTHREAD
 
 } // namespace Details
 
-  /** \brief Class to specify %Kokkos default node type and instantiate the default node.
-      \ingroup kokkos_node_api
-    */
+  /// \brief Specify Tpetra's default Node type.
+  ///
+  /// Tpetra::Map uses this class to get Tpetra's default Node type.
+  /// <i>This is an implementation detail of Tpetra</i>.  If you want
+  /// to know the default Node type, just ask Tpetra::Map, like this:
+  /// \code
+  /// typedef Tpetra::Map<>::node_type default_node_type;
+  /// \endcode
   class DefaultNode {
   public:
 #if defined(HAVE_TPETRA_DEFAULTNODE_CUDAWRAPPERNODE)

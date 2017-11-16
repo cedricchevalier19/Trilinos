@@ -101,13 +101,13 @@ namespace PHX {
     void registerEvaluator(typename PHX::FieldManager<Traits>::iterator it,
 			   const Teuchos::RCP< PHX::Evaluator<Traits> >& e);
         
-    template<typename DataT, typename EvalT, 
+    template<typename EvalT, typename DataT, 
 	     typename Tag0, typename Tag1, typename Tag2, typename Tag3,
 	     typename Tag4, typename Tag5, typename Tag6, typename Tag7> 
     void getFieldData(PHX::MDField<DataT,Tag0,Tag1,Tag2,Tag3,Tag4,Tag5,
 		      Tag6,Tag7>& f);
         
-    template<typename DataT, typename EvalT, 
+    template<typename EvalT, typename DataT, 
 	     typename Tag0, typename Tag1, typename Tag2, typename Tag3,
 	     typename Tag4, typename Tag5, typename Tag6, typename Tag7> 
     void getFieldData(PHX::MDField<const DataT,Tag0,Tag1,Tag2,Tag3,Tag4,Tag5,
@@ -230,15 +230,20 @@ namespace PHX {
     void aliasField(const PHX::FieldTag& aliasedField,
                     const PHX::FieldTag& targetField);
     
-    //! Allocates memory for a single evaluation type
+    //! Builds DAG and allocates memory for a single evaluation type
     template<typename EvalT>
-    void postRegistrationSetupForType(typename Traits::SetupData d);
+    void postRegistrationSetupForType(typename Traits::SetupData d, const bool& buildDeviceDAG = false);
 
-    //! Allocates memory for all evaluation types
-    void postRegistrationSetup(typename Traits::SetupData d);
+    //! Builds DAG and allocates memory for all evaluation types
+    void postRegistrationSetup(typename Traits::SetupData d, const bool& buildDeviceDAG = false);
 
+    //! Evalaute fields with a separate parallel_for for each node in the DAG.
     template<typename EvalT>
     void evaluateFields(typename Traits::EvalData d);
+
+    //! Evalaute fields using Device DAG capability where a single parallel_for evaluates the entire DAG.
+    template<typename EvalT>
+    void evaluateFieldsDeviceDag(const int& work_size, typename Traits::EvalData d);
 
 #ifdef PHX_ENABLE_KOKKOS_AMT
     /*! \brief Evaluate the fields using hybrid functional (asynchronous multi-tasking) and data parallelism.
