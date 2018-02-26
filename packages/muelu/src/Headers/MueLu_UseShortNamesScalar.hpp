@@ -17,6 +17,9 @@ typedef MueLu::AMGXOperator<Scalar,LocalOrdinal,GlobalOrdinal,Node> AMGXOperator
 #ifdef MUELU_ALGEBRAICPERMUTATIONSTRATEGY_SHORT
 typedef MueLu::AlgebraicPermutationStrategy<Scalar,LocalOrdinal,GlobalOrdinal,Node> AlgebraicPermutationStrategy;
 #endif
+#ifdef MUELU_BLACKBOXPFACTORY_SHORT
+typedef MueLu::BlackBoxPFactory<Scalar,LocalOrdinal,GlobalOrdinal,Node> BlackBoxPFactory;
+#endif
 #ifdef MUELU_BLOCKEDCOARSEMAPFACTORY_SHORT
 typedef MueLu::BlockedCoarseMapFactory<Scalar,LocalOrdinal,GlobalOrdinal,Node> BlockedCoarseMapFactory;
 #endif
@@ -26,11 +29,11 @@ typedef MueLu::BlockedDirectSolver<Scalar,LocalOrdinal,GlobalOrdinal,Node> Block
 #ifdef MUELU_BLOCKEDGAUSSSEIDELSMOOTHER_SHORT
 typedef MueLu::BlockedGaussSeidelSmoother<Scalar,LocalOrdinal,GlobalOrdinal,Node> BlockedGaussSeidelSmoother;
 #endif
-#ifdef MUELU_BLOCKEDJACOBISMOOTHER_SHORT
-typedef MueLu::BlockedJacobiSmoother<Scalar,LocalOrdinal,GlobalOrdinal,Node> BlockedJacobiSmoother;
-#endif
 #ifdef MUELU_BLOCKEDPFACTORY_SHORT
 typedef MueLu::BlockedPFactory<Scalar,LocalOrdinal,GlobalOrdinal,Node> BlockedPFactory;
+#endif
+#ifdef MUELU_BLOCKEDJACOBISMOOTHER_SHORT
+typedef MueLu::BlockedJacobiSmoother<Scalar,LocalOrdinal,GlobalOrdinal,Node> BlockedJacobiSmoother;
 #endif
 #ifdef MUELU_BLOCKEDRAPFACTORY_SHORT
 typedef MueLu::BlockedRAPFactory<Scalar,LocalOrdinal,GlobalOrdinal,Node> BlockedRAPFactory;
@@ -76,6 +79,9 @@ typedef MueLu::CoordinatesTransferFactory_kokkos<Scalar,LocalOrdinal,GlobalOrdin
 #endif
 #ifdef MUELU_COUPLEDRBMFACTORY_SHORT
 typedef MueLu::CoupledRBMFactory<Scalar,LocalOrdinal,GlobalOrdinal,Node> CoupledRBMFactory;
+#endif
+#ifdef MUELU_CREATEXPETRAPRECONDITIONER_SHORT
+typedef MueLu::CreateXpetraPreconditioner<Scalar,LocalOrdinal,GlobalOrdinal,Node> CreateXpetraPreconditioner;
 #endif
 #ifdef MUELU_DEMOFACTORY_SHORT
 typedef MueLu::DemoFactory<Scalar,LocalOrdinal,GlobalOrdinal,Node> DemoFactory;
@@ -259,6 +265,9 @@ typedef MueLu::SolverBase<Scalar,LocalOrdinal,GlobalOrdinal,Node> SolverBase;
 #endif
 #ifdef MUELU_STEEPESTDESCENTSOLVER_SHORT
 typedef MueLu::SteepestDescentSolver<Scalar,LocalOrdinal,GlobalOrdinal,Node> SteepestDescentSolver;
+#endif
+#ifdef MUELU_STRUCTUREDAGGREGATIONFACTORY_SHORT
+typedef MueLu::StructuredAggregationFactory<Scalar,LocalOrdinal,GlobalOrdinal,Node> StructuredAggregationFactory;
 #endif
 #ifdef MUELU_STRUCTUREDLINEDETECTIONFACTORY_SHORT
 typedef MueLu::StructuredLineDetectionFactory<Scalar,LocalOrdinal,GlobalOrdinal,Node> StructuredLineDetectionFactory;

@@ -123,6 +123,7 @@ namespace MueLu {
 
   template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
   ParameterListInterpreter<Scalar, LocalOrdinal, GlobalOrdinal, Node>::ParameterListInterpreter(ParameterList& paramList, Teuchos::RCP<const Teuchos::Comm<int> > comm, Teuchos::RCP<FactoryFactory> factFact, Teuchos::RCP<FacadeClassFactory> facadeFact) : factFact_(factFact) {
+    RCP<Teuchos::TimeMonitor> tM = rcp(new Teuchos::TimeMonitor(*Teuchos::TimeMonitor::getNewTimer(std::string("MueLu: ParameterListInterpreter (ParameterList)"))));
     if(facadeFact == Teuchos::null)
       facadeFact_ = Teuchos::rcp(new FacadeClassFactory());
     else
@@ -148,6 +149,7 @@ namespace MueLu {
 
   template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
   ParameterListInterpreter<Scalar, LocalOrdinal, GlobalOrdinal, Node>::ParameterListInterpreter(const std::string& xmlFileName, const Teuchos::Comm<int>& comm, Teuchos::RCP<FactoryFactory> factFact, Teuchos::RCP<FacadeClassFactory> facadeFact) : factFact_(factFact) {
+    RCP<Teuchos::TimeMonitor> tM = rcp(new Teuchos::TimeMonitor(*Teuchos::TimeMonitor::getNewTimer(std::string("MueLu: ParameterListInterpreter (XML)"))));
     if(facadeFact == Teuchos::null)
       facadeFact_ = Teuchos::rcp(new FacadeClassFactory());
     else
@@ -899,6 +901,10 @@ namespace MueLu {
       MUELU_TEST_AND_SET_PARAM_2LIST(paramList, defaultList, "aggregation: min agg size",               int, aggParams);
       MUELU_TEST_AND_SET_PARAM_2LIST(paramList, defaultList, "aggregation: max agg size",               int, aggParams);
       MUELU_TEST_AND_SET_PARAM_2LIST(paramList, defaultList, "aggregation: max selected neighbors",     int, aggParams);
+      if(useKokkos_) {
+        //if not using kokkos refactor Uncoupled, there is no algorithm option (always Serial)
+        MUELU_TEST_AND_SET_PARAM_2LIST(paramList, defaultList, "aggregation: phase 1 algorithm",  std::string, aggParams);
+      }
       MUELU_TEST_AND_SET_PARAM_2LIST(paramList, defaultList, "aggregation: enable phase 1",            bool, aggParams);
       MUELU_TEST_AND_SET_PARAM_2LIST(paramList, defaultList, "aggregation: enable phase 2a",           bool, aggParams);
       MUELU_TEST_AND_SET_PARAM_2LIST(paramList, defaultList, "aggregation: enable phase 2b",           bool, aggParams);
@@ -1811,16 +1817,41 @@ namespace MueLu {
       if (hieraList.isSublist("DataToWrite")) {
         //TODO We should be able to specify any data.  If it exists, write it.
         //TODO This would requires something like std::set<dataName, Array<int> >
+
+        // Process sublist to find data that is supposed to be written to files
         ParameterList foo = hieraList.sublist("DataToWrite");
-        std::string dataName = "Matrices";
+        std::string dataName = "A";
         if (foo.isParameter(dataName))
           this->matricesToPrint_ = Teuchos::getArrayFromStringParameter<int>(foo, dataName);
-        dataName = "Prolongators";
+        dataName = "P";
         if (foo.isParameter(dataName))
           this->prolongatorsToPrint_ = Teuchos::getArrayFromStringParameter<int>(foo, dataName);
-        dataName = "Restrictors";
+        dataName = "R";
         if (foo.isParameter(dataName))
           this->restrictorsToPrint_ = Teuchos::getArrayFromStringParameter<int>(foo, dataName);
+        dataName = "Nullspace";
+        if (foo.isParameter(dataName))
+          this->nullspaceToPrint_ = Teuchos::getArrayFromStringParameter<int>(foo, dataName);
+        dataName = "Coordinates";
+        if (foo.isParameter(dataName))
+          this->coordinatesToPrint_ = Teuchos::getArrayFromStringParameter<int>(foo, dataName);
+
+        // Take care of some deprecated options
+        dataName = "Matrices";
+        if (foo.isParameter(dataName)) {
+          this->GetOStream(Warnings0) << "Parameter 'Matrices' in 'DataToWrite' deprecated. Use 'A' instead." << std::endl;
+          this->matricesToPrint_ = Teuchos::getArrayFromStringParameter<int>(foo, dataName);
+        }
+        dataName = "Prolongators";
+        if (foo.isParameter(dataName)) {
+          this->GetOStream(Warnings0) << "Parameter 'Prolongators' in 'DataToWrite' deprecated. Use 'P' instead." << std::endl;
+          this->prolongatorsToPrint_ = Teuchos::getArrayFromStringParameter<int>(foo, dataName);
+        }
+        dataName = "Restrictors";
+        if (foo.isParameter(dataName)) {
+          this->GetOStream(Warnings0) << "Parameter 'Restrictors' in 'DataToWrite' deprecated. Use 'R' instead." << std::endl;
+          this->restrictorsToPrint_ = Teuchos::getArrayFromStringParameter<int>(foo, dataName);
+        }
       }
 
       // Get level configuration
