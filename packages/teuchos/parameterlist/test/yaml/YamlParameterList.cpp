@@ -245,5 +245,33 @@ namespace TeuchosTests
       "ES_POTENTIAL= factor*log(r_sq) +3*xin-3*yin;\n");
   }
 
+  TEUCHOS_UNIT_TEST(YAML, Issue2306)
+  {
+    // ensure that duplicate names throw an exception
+    TEST_THROW(Teuchos::getParametersFromYamlString(
+      "Foo:\n"
+      "  Bar:\n"
+      "    Value: 1\n"
+      "  Bar:\n"
+      "    Value: 2\n"),
+      Teuchos::ParserFail);
+  }
+
+  TEUCHOS_UNIT_TEST(YAML, keep_top_name)
+  {
+    Teuchos::ParameterList pl;
+    char const * const cstr =
+      "%YAML 1.1\n"
+      "---\n"
+      "Albany:\n"
+      "  some param: 5\n"
+      "...\n";
+    Teuchos::updateParametersFromYamlCString(cstr, Teuchos::ptr(&pl), true);
+    std::stringstream ss;
+    Teuchos::writeParameterListToYamlOStream(pl, ss);
+    auto s = ss.str();
+    TEST_EQUALITY(s, cstr);
+  }
+
 } //namespace TeuchosTests
 

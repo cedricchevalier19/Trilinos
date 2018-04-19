@@ -1,8 +1,29 @@
 IF (${Trilinos_ENABLE_Kokkos})
 
+  PRINT_VAR(KOKKOS_ARCH)
+
   # This is where to generate the gen_kokkos.cmake and KokkosCore_config.h 
   # that we will use in the configuration
   set(Kokkos_GEN_DIR ${CMAKE_BINARY_DIR})
+
+  # Enable debug checking in Kokkos by default if
+  # ${PROJECT_NAME}_ENABLE_DEBUG=ON
+  set(KOKKOS_ENABLE_DEBUG ${${PROJECT_NAME}_ENABLE_DEBUG}
+    CACHE BOOL
+    "Enable debug checking in Kokkos.")
+  set(Kokkos_ENABLE_Debug_Bounds_Check ${KOKKOS_ENABLE_DEBUG}
+    CACHE BOOL
+    "Enable bounds checking in Kokkos array classes.")
+  set(Kokkos_ENABLE_Profiling_DEFAULT ON)
+  if (DEFINED TPL_ENABLE_DLlib)
+    if (NOT TPL_ENABLE_DLlib)
+      message(STATUS  "Setting Kokkos_ENABLE_Profiling_DEFAULT=OFF because TPL_ENABLE_DLlib=${TPL_ENABLE_DLlib}")
+      set(Kokkos_ENABLE_Profiling_DEFAULT OFF)
+    endif()
+  endif()
+  set(Kokkos_ENABLE_Profiling ${Kokkos_ENABLE_Profiling_DEFAULT}
+    CACHE BOOL
+    "Enable Kokkos profiling hooks.")
 
   # Basic initialization (Used in KOKKOS_SETTINGS)
   set(KOKKOS_SRC_PATH ${Kokkos_SOURCE_DIR})
@@ -33,6 +54,14 @@ IF (${Trilinos_ENABLE_Kokkos})
         "${KOKKOS_SETTINGS} make -f ${KOKKOS_SRC_PATH}/cmake/Makefile.generate_cmake_settings CXX=${CMAKE_CXX_COMPILER} generate_build_settings")
   endif()
   include(${Kokkos_GEN_DIR}/kokkos_generated_settings.cmake)
+  set(libdir lib)
+  if (${PROJECT_NAME}_INSTALL_LIB_DIR)
+    set(libdir ${${PROJECT_NAME}_INSTALL_LIB_DIR})
+  endif()
+  if (INSTALL_LIB_DIR)
+    set(libdir ${INSTALL_LIB_DIR})
+  endif()
+  install(FILES ${Kokkos_GEN_DIR}/kokkos_generated_settings.cmake DESTINATION ${libdir}/cmake/Kokkos)
 
   IF (NOT KOKKOS_ARCH STREQUAL "None")
 

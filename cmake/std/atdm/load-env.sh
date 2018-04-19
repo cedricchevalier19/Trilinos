@@ -20,7 +20,7 @@ function get_abs_dir_path() {
   (cd -P -- "$1" && pwd)
 }
 
-# Get the base dir for the sourced script to find the base of Trilinos
+# Get the base dir for the sourced script
 _SCRIPT_DIR=`echo $BASH_SOURCE | sed "s/\(.*\)\/.*\.sh/\1/g"`
 #echo "_SCRIPT_DIR = '$_SCRIPT_DIR'"
 
@@ -44,33 +44,66 @@ fi
 # B) Get the system name from the hostname
 #
 
-THIS_HOSTNAME=`hostname`
-#echo "Hostname = '$THIS_HOSTNAME'"
+source $_SCRIPT_DIR/utils/get_known_system_name.sh
 
-ATDM_HOSTNAME=
-
-if [[ $THIS_HOSTNAME == "shiller"* ]] || [[ $THIS_HOSTNAME == "hansen"* ]] ; then
-  ATDM_HOSTNAME=shiller
-fi
-
-# ToDo: Add more know hosts as you add them!
-
-if [[ $ATDM_HOSTNAME == "" ]] ; then
-  echo "Error, hostname = '$THIS_HOSTNAME' not recognized as a known ATDM system name!"
+if [[ $ATDM_CONFIG_KNOWN_SYSTEM_NAME == "" ]] ; then
+  echo "Error, could not determine known system, aborting env loading"
   return
-else
-  echo "Hostname '$THIS_HOSTNAME' matches known ATDM system '$ATDM_HOSTNAME'!"
 fi
 
 #
-# C) Set JOB_NAME now that hostname has been asserted
+# C) Set JOB_NAME and Trilinos base directory
 #
 
-echo "Setting JOB_NAME=$1"
 export JOB_NAME=$1
 
+# Get the Trilins base dir
+export ATDM_CONFIG_TRILNOS_DIR=`get_abs_dir_path $_SCRIPT_DIR/../../..`
+echo "ATDM_CONFIG_TRILNOS_DIR = $ATDM_CONFIG_TRILNOS_DIR"
+
 #
-# D) Load the matching env
+# D) Parse $JOB_NAME for consumption by the system-specific environoment.sh
+# script
 #
 
-source $_SCRIPT_DIR/$ATDM_HOSTNAME/environment.sh
+source $_SCRIPT_DIR/utils/set_build_options.sh
+
+#
+# E) Load the matching env
+#
+
+# Set other vaues to empty by default
+unset OMP_NUM_THREADS
+unset OMP_PROC_BIND
+unset OMP_PLACES
+unset OMPI_CC
+unset OMPI_CXX
+unset OMPI_FC
+unset ATDM_CONFIG_USE_NINJA
+unset ATDM_CONFIG_BUILD_COUNT
+unset ATDM_CONFIG_KOKKOS_ARCH
+unset ATDM_CONFIG_CTEST_PARALLEL_LEVEL
+unset ATDM_CONFIG_BLAS_LIB
+unset ATDM_CONFIG_LAPACK_LIB
+unset ATDM_CONFIG_USE_HWLOC
+unset ATDM_CONFIG_HWLOC_LIBS
+unset ATDM_CONFIG_USE_CUDA
+unset ATDM_CONFIG_HDF5_LIBS
+unset ATDM_CONFIG_NETCDF_LIBS
+unset ATDM_CONFIG_MPI_EXEC
+unset ATDM_CONFIG_MPI_PRE_FLAGS
+unset ATDM_CONFIG_MPI_POST_FLAG
+unset ATDM_CONFIG_COMPLETED_ENV_SETUP
+
+source $_SCRIPT_DIR/$ATDM_CONFIG_KNOWN_SYSTEM_NAME/environment.sh
+
+if [ "$ATDM_CONFIG_COMPLETED_ENV_SETUP" != "TRUE" ] ; then
+  echo
+  echo "***"
+  echo "*** ERROR: Environment setup was not successful, see above errors!"
+  echo "***"
+  echo
+fi
+
+# NOTE: The ATDMDevEnv.cmake module when processed will assert that all of
+# these are set!

@@ -72,11 +72,11 @@ namespace Tpetra {
   // over them and go down to the CrsMatrix class declaration.  Thank
   // you.
   //
-  template <class LO, class GO, class N, const bool isClassic>
+  template <class LO, class GO, class N>
   class CrsGraph;
 
   // forward declaration (needed for "friend" inside CrsGraph)
-  template <class S, class LO, class GO, class N, const bool isClassic>
+  template <class S, class LO, class GO, class N>
   class CrsMatrix;
 
   namespace Experimental {
@@ -243,8 +243,7 @@ namespace Tpetra {
   /// latter calls the former).
   template <class LocalOrdinal = ::Tpetra::Details::DefaultTypes::local_ordinal_type,
             class GlobalOrdinal = ::Tpetra::Details::DefaultTypes::global_ordinal_type,
-            class Node = ::Tpetra::Details::DefaultTypes::node_type,
-            const bool classic = Node::classic>
+            class Node = ::Tpetra::Details::DefaultTypes::node_type>
   class CrsGraph :
     public RowGraph<LocalOrdinal, GlobalOrdinal, Node>,
     public DistObject<GlobalOrdinal,
@@ -253,11 +252,9 @@ namespace Tpetra {
                       Node>,
     public Teuchos::ParameterListAcceptorDefaultBase
   {
-    static_assert (! classic, "The 'classic' version of Tpetra was deprecated long ago, and has been removed.");
-
-    template <class S, class LO, class GO, class N, const bool isClassic>
+    template <class S, class LO, class GO, class N>
     friend class CrsMatrix;
-    template <class LO2, class GO2, class N2, const bool isClassic>
+    template <class LO2, class GO2, class N2>
     friend class CrsGraph;
     template <class S, class LO, class GO, class N>
     friend class ::Tpetra::Experimental::BlockCrsMatrix;
@@ -578,12 +575,12 @@ namespace Tpetra {
     ///   and range maps passed to fillComplete() are those of the map
     ///   being cloned, if they exist. Otherwise, the row map is used.
     template<class Node2>
-    Teuchos::RCP<CrsGraph<LocalOrdinal, GlobalOrdinal, Node2, Node2::classic> >
+    Teuchos::RCP<CrsGraph<LocalOrdinal, GlobalOrdinal, Node2> >
     clone (const Teuchos::RCP<Node2>& node2,
            const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null) const
     {
-      typedef CrsGraph<LocalOrdinal, GlobalOrdinal, Node2, Node2::classic> output_crs_graph_type;
-      typedef CrsGraph<LocalOrdinal, GlobalOrdinal, Node, classic> input_crs_graph_type;
+      typedef CrsGraph<LocalOrdinal, GlobalOrdinal, Node2> output_crs_graph_type;
+      typedef CrsGraph<LocalOrdinal, GlobalOrdinal, Node> input_crs_graph_type;
       typedef Details::CrsGraphCopier<output_crs_graph_type, input_crs_graph_type> copier_type;
       return copier_type::clone (*this, node2, params);
     }
@@ -1371,6 +1368,196 @@ namespace Tpetra {
       }
     };
 
+  private:
+    // Friend declaration for nonmember function.
+    template<class CrsGraphType>
+    friend Teuchos::RCP<CrsGraphType>
+    importAndFillCompleteCrsGraph (const Teuchos::RCP<const CrsGraphType>& sourceGraph,
+                                    const Import<typename CrsGraphType::local_ordinal_type,
+                                                 typename CrsGraphType::global_ordinal_type,
+                                                 typename CrsGraphType::node_type>& importer,
+                                    const Teuchos::RCP<const Map<typename CrsGraphType::local_ordinal_type,
+                                                                 typename CrsGraphType::global_ordinal_type,
+                                                                 typename CrsGraphType::node_type> >& domainMap,
+                                    const Teuchos::RCP<const Map<typename CrsGraphType::local_ordinal_type,
+                                                                 typename CrsGraphType::global_ordinal_type,
+                                                                 typename CrsGraphType::node_type> >& rangeMap,
+                                    const Teuchos::RCP<Teuchos::ParameterList>& params);
+
+    // Friend declaration for nonmember function.
+    template<class CrsGraphType>
+    friend Teuchos::RCP<CrsGraphType>
+    importAndFillCompleteCrsGraph (const Teuchos::RCP<const CrsGraphType>& sourceGraph,
+                                    const Import<typename CrsGraphType::local_ordinal_type,
+                                                 typename CrsGraphType::global_ordinal_type,
+                                                 typename CrsGraphType::node_type>& rowImporter,
+                                   const Import<typename CrsGraphType::local_ordinal_type,
+                                                typename CrsGraphType::global_ordinal_type,
+                                                typename CrsGraphType::node_type>& domainImporter,
+                                    const Teuchos::RCP<const Map<typename CrsGraphType::local_ordinal_type,
+                                                                 typename CrsGraphType::global_ordinal_type,
+                                                                 typename CrsGraphType::node_type> >& domainMap,
+                                    const Teuchos::RCP<const Map<typename CrsGraphType::local_ordinal_type,
+                                                                 typename CrsGraphType::global_ordinal_type,
+                                                                 typename CrsGraphType::node_type> >& rangeMap,
+                                    const Teuchos::RCP<Teuchos::ParameterList>& params);
+
+
+    // Friend declaration for nonmember function.
+    template<class CrsGraphType>
+    friend Teuchos::RCP<CrsGraphType>
+    exportAndFillCompleteCrsGraph (const Teuchos::RCP<const CrsGraphType>& sourceGraph,
+                                    const Export<typename CrsGraphType::local_ordinal_type,
+                                                 typename CrsGraphType::global_ordinal_type,
+                                                 typename CrsGraphType::node_type>& exporter,
+                                    const Teuchos::RCP<const Map<typename CrsGraphType::local_ordinal_type,
+                                                                 typename CrsGraphType::global_ordinal_type,
+                                                                 typename CrsGraphType::node_type> >& domainMap,
+                                    const Teuchos::RCP<const Map<typename CrsGraphType::local_ordinal_type,
+                                                                 typename CrsGraphType::global_ordinal_type,
+                                                                 typename CrsGraphType::node_type> >& rangeMap,
+                                    const Teuchos::RCP<Teuchos::ParameterList>& params);
+
+    // Friend declaration for nonmember function.
+    template<class CrsGraphType>
+    friend Teuchos::RCP<CrsGraphType>
+    exportAndFillCompleteCrsGraph (const Teuchos::RCP<const CrsGraphType>& sourceGraph,
+                                    const Export<typename CrsGraphType::local_ordinal_type,
+                                                 typename CrsGraphType::global_ordinal_type,
+                                                 typename CrsGraphType::node_type>& rowExporter,
+                                    const Export<typename CrsGraphType::local_ordinal_type,
+                                                 typename CrsGraphType::global_ordinal_type,
+                                                 typename CrsGraphType::node_type>& domainExporter,
+                                    const Teuchos::RCP<const Map<typename CrsGraphType::local_ordinal_type,
+                                                                 typename CrsGraphType::global_ordinal_type,
+                                                                 typename CrsGraphType::node_type> >& domainMap,
+                                    const Teuchos::RCP<const Map<typename CrsGraphType::local_ordinal_type,
+                                                                 typename CrsGraphType::global_ordinal_type,
+                                                                 typename CrsGraphType::node_type> >& rangeMap,
+                                    const Teuchos::RCP<Teuchos::ParameterList>& params);
+
+  public:
+    /// \brief Import from <tt>this</tt> to the given destination
+    ///   graph, and make the result fill complete.
+    ///
+    /// If destGraph.is_null(), this creates a new graph as the
+    /// destination.  (This is why destGraph is passed in by nonconst
+    /// reference to RCP.)  Otherwise it checks for "pristine" status
+    /// and throws if that is not the case.  "Pristine" means that the
+    /// graph has no entries and is not fill complete.
+    ///
+    /// Use of the "non-member constructor" version of this method,
+    /// exportAndFillCompleteCrsGraph, is preferred for user
+    /// applications.
+    ///
+    /// \warning This method is intended for expert developer use
+    ///   only, and should never be called by user code.
+    void
+    importAndFillComplete (Teuchos::RCP<CrsGraph<LocalOrdinal, GlobalOrdinal, Node> >& destGraph,
+                           const import_type& importer,
+                           const Teuchos::RCP<const map_type>& domainMap,
+                           const Teuchos::RCP<const map_type>& rangeMap,
+                           const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null) const;
+
+    /// \brief Import from <tt>this</tt> to the given destination
+    ///   graph, and make the result fill complete.
+    ///
+    /// If destGraph.is_null(), this creates a new graph as the
+    /// destination.  (This is why destGraph is passed in by nonconst
+    /// reference to RCP.)  Otherwise it checks for "pristine" status
+    /// and throws if that is not the case.  "Pristine" means that the
+    /// graph has no entries and is not fill complete.
+    ///
+    /// Use of the "non-member constructor" version of this method,
+    /// exportAndFillCompleteCrsGraph, is preferred for user
+    /// applications.
+    ///
+    /// \warning This method is intended for expert developer use
+    ///   only, and should never be called by user code.
+    void
+    importAndFillComplete (Teuchos::RCP<CrsGraph<LocalOrdinal, GlobalOrdinal, Node> >& destGraph,
+                           const import_type& rowImporter,
+                           const import_type& domainImporter,
+                           const Teuchos::RCP<const map_type>& domainMap,
+                           const Teuchos::RCP<const map_type>& rangeMap,
+                           const Teuchos::RCP<Teuchos::ParameterList>& params) const;
+
+
+    /// \brief Export from <tt>this</tt> to the given destination
+    ///   graph, and make the result fill complete.
+    ///
+    /// If destGraph.is_null(), this creates a new graph as the
+    /// destination.  (This is why destGraph is passed in by nonconst
+    /// reference to RCP.)  Otherwise it checks for "pristine" status
+    /// and throws if that is not the case.  "Pristine" means that the
+    /// graph has no entries and is not fill complete.
+    ///
+    /// Use of the "non-member constructor" version of this method,
+    /// exportAndFillCompleteCrsGraph, is preferred for user
+    /// applications.
+    ///
+    /// \warning This method is intended for expert developer use
+    ///   only, and should never be called by user code.
+    void
+    exportAndFillComplete (Teuchos::RCP<CrsGraph<LocalOrdinal, GlobalOrdinal, Node> >& destGraph,
+                           const export_type& exporter,
+                           const Teuchos::RCP<const map_type>& domainMap = Teuchos::null,
+                           const Teuchos::RCP<const map_type>& rangeMap = Teuchos::null,
+                           const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null) const;
+
+    /// \brief Export from <tt>this</tt> to the given destination
+    ///   graph, and make the result fill complete.
+    ///
+    /// If destGraph.is_null(), this creates a new graph as the
+    /// destination.  (This is why destGraph is passed in by nonconst
+    /// reference to RCP.)  Otherwise it checks for "pristine" status
+    /// and throws if that is not the case.  "Pristine" means that the
+    /// graph has no entries and is not fill complete.
+    ///
+    /// Use of the "non-member constructor" version of this method,
+    /// exportAndFillCompleteCrsGraph, is preferred for user
+    /// applications.
+    ///
+    /// \warning This method is intended for expert developer use
+    ///   only, and should never be called by user code.
+    void
+    exportAndFillComplete (Teuchos::RCP<CrsGraph<LocalOrdinal, GlobalOrdinal, Node> >& destGraph,
+                           const export_type& rowExporter,
+                           const export_type& domainExporter,
+                           const Teuchos::RCP<const map_type>& domainMap,
+                           const Teuchos::RCP<const map_type>& rangeMap,
+                           const Teuchos::RCP<Teuchos::ParameterList>& params) const;
+
+
+  private:
+    /// \brief Transfer (e.g. Import/Export) from <tt>this</tt> to the
+    ///   given destination graph, and make the result fill complete.
+    ///
+    /// If destGraph.is_null(), this creates a new graph, otherwise it
+    /// checks for "pristine" status and throws if that is not the
+    /// case.  This method implements importAndFillComplete and
+    /// exportAndFillComplete, which in turn implemment the nonmember
+    /// "constructors" importAndFillCompleteCrsGraph and
+    /// exportAndFillCompleteCrsGraph.  It's convenient to put those
+    /// nonmember constructors' implementations inside the CrsGraph
+    /// class, so that we don't have to put much code in the _decl
+    /// header file.
+    ///
+    /// The point of this method is to fuse three tasks:
+    ///
+    ///   1. Create a destination graph (CrsGraph constructor)
+    ///   2. Import or Export this graph to the destination graph
+    ///   3. Call fillComplete on the destination graph
+    ///
+    /// Fusing these tasks can avoid some communication and work.
+    void
+    transferAndFillComplete (Teuchos::RCP<CrsGraph<LocalOrdinal, GlobalOrdinal, Node> >& destGraph,
+                             const ::Tpetra::Details::Transfer<LocalOrdinal, GlobalOrdinal, Node>& rowTransfer,
+                             const Teuchos::RCP<const ::Tpetra::Details::Transfer<LocalOrdinal, GlobalOrdinal, Node> > & domainTransfer,
+                             const Teuchos::RCP<const map_type>& domainMap = Teuchos::null,
+                             const Teuchos::RCP<const map_type>& rangeMap = Teuchos::null,
+                             const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null) const;
+
   protected:
     // these structs are conveniences, to cut down on the number of
     // arguments to some of the methods below.
@@ -2020,15 +2207,261 @@ namespace Tpetra {
   /// \return A dynamically allocated (DynamicProfile) graph with
   ///   specified number of nonzeros per row (defaults to zero).
   /// \relatesalso CrsGraph
-  template <class LocalOrdinal, class GlobalOrdinal, class Node, const bool classic = Node::classic>
-  Teuchos::RCP<CrsGraph<LocalOrdinal, GlobalOrdinal, Node, classic> >
+  template <class LocalOrdinal, class GlobalOrdinal, class Node>
+  Teuchos::RCP<CrsGraph<LocalOrdinal, GlobalOrdinal, Node> >
   createCrsGraph (const Teuchos::RCP<const Map<LocalOrdinal, GlobalOrdinal, Node> > &map,
                   size_t maxNumEntriesPerRow = 0,
                   const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null)
   {
     using Teuchos::rcp;
-    typedef CrsGraph<LocalOrdinal, GlobalOrdinal, Node, classic> graph_type;
+    typedef CrsGraph<LocalOrdinal, GlobalOrdinal, Node> graph_type;
     return rcp (new graph_type (map, maxNumEntriesPerRow, DynamicProfile, params));
+  }
+
+  /// \brief Nonmember CrsGraph constructor that fuses Import and fillComplete().
+  /// \relatesalso CrsGraph
+  /// \tparam CrsGraphType A specialization of CrsGraph.
+  ///
+  /// A common use case is to create an empty destination CrsGraph,
+  /// redistribute from a source CrsGraph (by an Import or Export
+  /// operation), then call fillComplete() on the destination
+  /// CrsGraph.  This constructor fuses these three cases, for an
+  /// Import redistribution.
+  ///
+  /// Fusing redistribution and fillComplete() exposes potential
+  /// optimizations.  For example, it may make constructing the column
+  /// Map faster, and it may avoid intermediate unoptimized storage in
+  /// the destination CrsGraph.
+  ///
+  /// The resulting graph is fill complete (in the sense of
+  /// isFillComplete()) and has optimized storage (in the sense of
+  /// isStorageOptimized()).  By default, its domain Map is the domain
+  /// Map of the source graph, and its range Map is the range Map of
+  /// the source graph.
+  ///
+  /// \warning If the target Map of the Import is a subset of the
+  ///   source Map of the Import, then you cannot use the default
+  ///   range Map.  You should instead construct a nonoverlapping
+  ///   version of the target Map and supply that as the nondefault
+  ///   value of the range Map.
+  ///
+  /// \param sourceGraph [in] The source graph from which to
+  ///   import.  The source of an Import must have a nonoverlapping
+  ///   distribution.
+  ///
+  /// \param importer [in] The Import instance containing a
+  ///   precomputed redistribution plan.  The source Map of the
+  ///   Import must be the same as the rowMap of sourceGraph unless
+  ///   the "Reverse Mode" option on the params list, in which case
+  ///   the targetMap of Import must match the rowMap of the sourceGraph
+  ///
+  /// \param domainMap [in] Domain Map of the returned graph.  If
+  ///   null, we use the default, which is the domain Map of the
+  ///   source graph.
+  ///
+  /// \param rangeMap [in] Range Map of the returned graph.  If
+  ///   null, we use the default, which is the range Map of the
+  ///   source graph.
+  ///
+  /// \param params [in/out] Optional list of parameters.  If not
+  ///   null, any missing parameters will be filled in with their
+  ///   default values.
+  template<class CrsGraphType>
+  Teuchos::RCP<CrsGraphType>
+  importAndFillCompleteCrsGraph (const Teuchos::RCP<const CrsGraphType>& sourceGraph,
+                                  const Import<typename CrsGraphType::local_ordinal_type,
+                                               typename CrsGraphType::global_ordinal_type,
+                                               typename CrsGraphType::node_type>& importer,
+                                  const Teuchos::RCP<const Map<typename CrsGraphType::local_ordinal_type,
+                                                               typename CrsGraphType::global_ordinal_type,
+                                                               typename CrsGraphType::node_type> >& domainMap = Teuchos::null,
+                                  const Teuchos::RCP<const Map<typename CrsGraphType::local_ordinal_type,
+                                                               typename CrsGraphType::global_ordinal_type,
+                                                               typename CrsGraphType::node_type> >& rangeMap = Teuchos::null,
+                                  const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null)
+  {
+    Teuchos::RCP<CrsGraphType> destGraph;
+    sourceGraph->importAndFillComplete (destGraph,importer,domainMap, rangeMap, params);
+    return destGraph;
+  }
+
+  /// \brief Nonmember CrsGraph constructor that fuses Import and fillComplete().
+  /// \relatesalso CrsGraph
+  /// \tparam CrsGraphType A specialization of CrsGraph.
+  ///
+  /// A common use case is to create an empty destination CrsGraph,
+  /// redistribute from a source CrsGraph (by an Import or Export
+  /// operation), then call fillComplete() on the destination
+  /// CrsGraph.  This constructor fuses these three cases, for an
+  /// Import redistribution.
+  ///
+  /// Fusing redistribution and fillComplete() exposes potential
+  /// optimizations.  For example, it may make constructing the column
+  /// Map faster, and it may avoid intermediate unoptimized storage in
+  /// the destination CrsGraph.
+  ///
+  /// The resulting graph is fill complete (in the sense of
+  /// isFillComplete()) and has optimized storage (in the sense of
+  /// isStorageOptimized()).  By default, its domain Map is the domain
+  /// Map of the source graph, and its range Map is the range Map of
+  /// the source graph.
+  ///
+  /// \warning If the target Map of the Import is a subset of the
+  ///   source Map of the Import, then you cannot use the default
+  ///   range Map.  You should instead construct a nonoverlapping
+  ///   version of the target Map and supply that as the nondefault
+  ///   value of the range Map.
+  ///
+  /// \param sourceGraph [in] The source graph from which to
+  ///   import.  The source of an Import must have a nonoverlapping
+  ///   distribution.
+  ///
+  /// \param rowImporter [in] The Import instance containing a
+  ///   precomputed redistribution plan.  The source Map of the
+  ///   Import must be the same as the rowMap of sourceGraph unless
+  ///   the "Reverse Mode" option on the params list, in which case
+  ///   the targetMap of Import must match the rowMap of the sourceGraph
+  ///
+  /// \param domainImporter [in] The Import instance containing a
+  ///   precomputed redistribution plan.  The source Map of the
+  ///   Import must be the same as the domainMap of sourceGraph unless
+  ///   the "Reverse Mode" option on the params list, in which case
+  ///   the targetMap of Import must match the domainMap of the sourceGraph
+  ///
+  /// \param domainMap [in] Domain Map of the returned graph.
+  ///
+  /// \param rangeMap [in] Range Map of the returned graph.
+  ///
+  /// \param params [in/out] Optional list of parameters.  If not
+  ///   null, any missing parameters will be filled in with their
+  ///   default values.
+  template<class CrsGraphType>
+  Teuchos::RCP<CrsGraphType>
+  importAndFillCompleteCrsGraph (const Teuchos::RCP<const CrsGraphType>& sourceGraph,
+                                  const Import<typename CrsGraphType::local_ordinal_type,
+                                               typename CrsGraphType::global_ordinal_type,
+                                               typename CrsGraphType::node_type>& rowImporter,
+                                  const Import<typename CrsGraphType::local_ordinal_type,
+                                              typename CrsGraphType::global_ordinal_type,
+                                              typename CrsGraphType::node_type>& domainImporter,
+                                  const Teuchos::RCP<const Map<typename CrsGraphType::local_ordinal_type,
+                                                               typename CrsGraphType::global_ordinal_type,
+                                                               typename CrsGraphType::node_type> >& domainMap,
+                                  const Teuchos::RCP<const Map<typename CrsGraphType::local_ordinal_type,
+                                                               typename CrsGraphType::global_ordinal_type,
+                                                               typename CrsGraphType::node_type> >& rangeMap,
+                                  const Teuchos::RCP<Teuchos::ParameterList>& params)
+  {
+    Teuchos::RCP<CrsGraphType> destGraph;
+    sourceGraph->importAndFillComplete (destGraph,rowImporter,domainImporter, domainMap, rangeMap, params);
+    return destGraph;
+  }
+
+  /// \brief Nonmember CrsGraph constructor that fuses Export and fillComplete().
+  /// \relatesalso CrsGraph
+  /// \tparam CrsGraphType A specialization of CrsGraph.
+  ///
+  /// For justification, see the documentation of
+  /// importAndFillCompleteCrsGraph() (which is the Import analog of
+  /// this function).
+  ///
+  /// The resulting graph is fill complete (in the sense of
+  /// isFillComplete()) and has optimized storage (in the sense of
+  /// isStorageOptimized()).  By default, its domain Map is the domain
+  /// Map of the source graph, and its range Map is the range Map of
+  /// the source graph.
+  ///
+  /// \param sourceGraph [in] The source graph from which to
+  ///   export.  Its row Map may be overlapping, since the source of
+  ///   an Export may be overlapping.
+  ///
+  /// \param exporter [in] The Export instance containing a
+  ///   precomputed redistribution plan.  The source Map of the
+  ///   Export must be the same as the row Map of sourceGraph.
+  ///
+  /// \param domainMap [in] Domain Map of the returned graph.  If
+  ///   null, we use the default, which is the domain Map of the
+  ///   source graph.
+  ///
+  /// \param rangeMap [in] Range Map of the returned graph.  If
+  ///   null, we use the default, which is the range Map of the
+  ///   source graph.
+  ///
+  /// \param params [in/out] Optional list of parameters.  If not
+  ///   null, any missing parameters will be filled in with their
+  ///   default values.
+  template<class CrsGraphType>
+  Teuchos::RCP<CrsGraphType>
+  exportAndFillCompleteCrsGraph (const Teuchos::RCP<const CrsGraphType>& sourceGraph,
+                                  const Export<typename CrsGraphType::local_ordinal_type,
+                                               typename CrsGraphType::global_ordinal_type,
+                                               typename CrsGraphType::node_type>& exporter,
+                                  const Teuchos::RCP<const Map<typename CrsGraphType::local_ordinal_type,
+                                                               typename CrsGraphType::global_ordinal_type,
+                                                               typename CrsGraphType::node_type> >& domainMap = Teuchos::null,
+                                  const Teuchos::RCP<const Map<typename CrsGraphType::local_ordinal_type,
+                                                               typename CrsGraphType::global_ordinal_type,
+                                                               typename CrsGraphType::node_type> >& rangeMap = Teuchos::null,
+                                  const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null)
+  {
+    Teuchos::RCP<CrsGraphType> destGraph;
+    sourceGraph->exportAndFillComplete (destGraph,exporter,domainMap, rangeMap, params);
+    return destGraph;
+  }
+
+  /// \brief Nonmember CrsGraph constructor that fuses Export and fillComplete().
+  /// \relatesalso CrsGraph
+  /// \tparam CrsGraphType A specialization of CrsGraph.
+  ///
+  /// For justification, see the documentation of
+  /// importAndFillCompleteCrsGraph() (which is the Import analog of
+  /// this function).
+  ///
+  /// The resulting graph is fill complete (in the sense of
+  /// isFillComplete()) and has optimized storage (in the sense of
+  /// isStorageOptimized()).  By default, its domain Map is the domain
+  /// Map of the source graph, and its range Map is the range Map of
+  /// the source graph.
+  ///
+  /// \param sourceGraph [in] The source graph from which to
+  ///   export.  Its row Map may be overlapping, since the source of
+  ///   an Export may be overlapping.
+  ///
+  /// \param rowExporter [in] The Export instance containing a
+  ///   precomputed redistribution plan.  The source Map of the
+  ///   Export must be the same as the row Map of sourceGraph.
+  ///
+  /// \param domainExporter [in] The Export instance containing a
+  ///   precomputed redistribution plan.  The source Map of the
+  ///   Export must be the same as the domain Map of sourceGraph.
+  ///
+  /// \param domainMap [in] Domain Map of the returned graph.
+  ///
+  /// \param rangeMap [in] Range Map of the returned graph.
+  ///
+  /// \param params [in/out] Optional list of parameters.  If not
+  ///   null, any missing parameters will be filled in with their
+  ///   default values.
+  template<class CrsGraphType>
+  Teuchos::RCP<CrsGraphType>
+  exportAndFillCompleteCrsGraph (const Teuchos::RCP<const CrsGraphType>& sourceGraph,
+                                  const Export<typename CrsGraphType::local_ordinal_type,
+                                               typename CrsGraphType::global_ordinal_type,
+                                               typename CrsGraphType::node_type>& rowExporter,
+                                  const Export<typename CrsGraphType::local_ordinal_type,
+                                               typename CrsGraphType::global_ordinal_type,
+                                               typename CrsGraphType::node_type>& domainExporter,
+                                  const Teuchos::RCP<const Map<typename CrsGraphType::local_ordinal_type,
+                                                               typename CrsGraphType::global_ordinal_type,
+                                                               typename CrsGraphType::node_type> >& domainMap,
+                                  const Teuchos::RCP<const Map<typename CrsGraphType::local_ordinal_type,
+                                                               typename CrsGraphType::global_ordinal_type,
+                                                               typename CrsGraphType::node_type> >& rangeMap,
+                                  const Teuchos::RCP<Teuchos::ParameterList>& params)
+  {
+    Teuchos::RCP<CrsGraphType> destGraph;
+    sourceGraph->exportAndFillComplete (destGraph,rowExporter,domainExporter,domainMap, rangeMap, params);
+    return destGraph;
   }
 
   namespace Details {
