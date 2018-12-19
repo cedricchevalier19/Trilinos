@@ -153,7 +153,7 @@
     #else
       #define KOKKOS_LAMBDA [=]__host__ __device__
 
-      #if defined( KOKKOS_ENABLE_CXX1Z )
+      #if defined( KOKKOS_ENABLE_CXX17 ) || defined( KOKKOS_ENABLE_CXX20 )
         #define KOKKOS_CLASS_LAMBDA        [=,*this] __host__ __device__
       #endif
     #endif
@@ -213,7 +213,7 @@
   #define KOKKOS_LAMBDA [=]
 #endif
 
-#if defined( KOKKOS_ENABLE_CXX1Z ) && !defined( KOKKOS_CLASS_LAMBDA )
+#if (defined( KOKKOS_ENABLE_CXX17 ) || defined( KOKKOS_ENABLE_CXX20) )&& !defined( KOKKOS_CLASS_LAMBDA )
   #define KOKKOS_CLASS_LAMBDA [=,*this]
 #endif
 
@@ -521,7 +521,21 @@
 #if defined ( KOKKOS_ENABLE_CUDA )
   #if ( 9000 <= CUDA_VERSION )
   #define KOKKOS_IMPL_CUDA_VERSION_9_WORKAROUND
+  #if ( __CUDA_ARCH__ )
+    #define KOKKOS_IMPL_CUDA_SYNCWARP_NEEDS_MASK
+  #endif
   #endif
 #endif
+
+#define KOKKOS_INVALID_INDEX (~std::size_t(0))
+
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
+  #define KOKKOS_IMPL_CTOR_DEFAULT_ARG 0
+#else
+  #define KOKKOS_IMPL_CTOR_DEFAULT_ARG KOKKOS_INVALID_INDEX
+#endif
+
+
+
 #endif // #ifndef KOKKOS_MACROS_HPP
 

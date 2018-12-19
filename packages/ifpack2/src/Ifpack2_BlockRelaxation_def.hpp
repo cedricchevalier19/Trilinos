@@ -88,7 +88,7 @@ BlockRelaxation (const Teuchos::RCP<const row_matrix_type>& A)
   PartitionerType_ ("linear"),
   NumSweeps_ (1),
   NumLocalBlocks_(0),
-  containerType_ ("Dense"),
+  containerType_ ("TriDi"),
   PrecType_ (Ifpack2::Details::JACOBI),
   ZeroStartingSolution_ (true),
   hasBlockCrsMatrix_ (false),
@@ -145,7 +145,7 @@ getValidParameters () const
   validParams->set("Amesos2",dummyList);
   validParams->sublist("Amesos2").disableRecursiveValidation();
   validParams->set("Amesos2 solver name", "KLU2");
-  
+
   Teuchos::ArrayRCP<int> tmp;
   validParams->set("partitioner: map", tmp);
 
@@ -156,7 +156,7 @@ getValidParameters () const
                                    typename MatrixType::global_ordinal_type,
                                    typename MatrixType::node_type> > dummy;
   validParams->set("partitioner: coordinates",dummy);
-  
+
   return validParams;
 }
 
@@ -177,6 +177,13 @@ setParameters (const Teuchos::ParameterList& List)
     // If its value does not match the currently registered Container types,
     // the ContainerFactory will throw with an informative message.
     containerType_ = List.get<std::string> ("relaxation: container");
+    // Intercept more human-readable aliases for the *TriDi containers
+    if(containerType_ == "Tridiagonal") {
+      containerType_ = "TriDi";
+    }
+    if(containerType_ == "Block Tridiagonal") {
+      containerType_ = "BlockTriDi";
+    }
   }
 
   if (List.isParameter ("relaxation: type")) {
@@ -277,7 +284,7 @@ setParameters (const Teuchos::ParameterList& List)
     }
   }
 
-  std::string defaultContainer = "Dense";
+  std::string defaultContainer = "TriDi";
   if(std::is_same<ContainerType, Container<MatrixType> >::value)
   {
     //Generic container template parameter, container type specified in List
@@ -415,9 +422,9 @@ size_t BlockRelaxation<MatrixType,ContainerType>::getNodeSmootherComplexity() co
   // Relaxation methods cost roughly one apply + one block-diagonal inverse per iteration
   // NOTE: This approximates all blocks as dense, which may overstate the cost if you have a sparse (or banded) container.
   size_t block_nnz = 0;
-  for (local_ordinal_type i = 0; i < NumLocalBlocks_; ++i) 
+  for (local_ordinal_type i = 0; i < NumLocalBlocks_; ++i)
     block_nnz += Partitioner_->numRowsInPart(i) *Partitioner_->numRowsInPart(i);
-    
+
   return block_nnz + A_->getNodeNumEntries();
 }
 
@@ -468,9 +475,14 @@ apply (const Tpetra::MultiVector<typename MatrixType::scalar_type,
   // we need to create an auxiliary vector, Xcopy
   Teuchos::RCP<const MV> X_copy;
   {
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
     auto X_lcl_host = X.template getLocalView<Kokkos::HostSpace> ();
     auto Y_lcl_host = Y.template getLocalView<Kokkos::HostSpace> ();
-    if (X_lcl_host.ptr_on_device () == Y_lcl_host.ptr_on_device ()) {
+#else
+    auto X_lcl_host = X.getLocalViewHost ();
+    auto Y_lcl_host = Y.getLocalViewHost ();
+#endif
+    if (X_lcl_host.data () == Y_lcl_host.data ()) {
       X_copy = rcp (new MV (X, Teuchos::Copy));
     } else {
       X_copy = rcpFromRef (X);
@@ -612,7 +624,7 @@ initialize ()
     TEUCHOS_TEST_FOR_EXCEPTION
       (hasBlockCrsMatrix_, std::runtime_error,
        "Ifpack2::BlockRelaxation::initialize: "
-       "We do not support overlapped Jacobi yet for Tpetra::BlockCrsMatrix.  Sorry!");      
+       "We do not support overlapped Jacobi yet for Tpetra::BlockCrsMatrix.  Sorry!");
 
     // weight of each vertex
     W_ = rcp (new vector_type (A_->getRowMap ()));
@@ -679,7 +691,7 @@ ExtractSubmatricesStructure ()
   std::string containerType = ContainerType::getName ();
   if (containerType == "Generic") {
     // ContainerType is Container<row_matrix_type>.  Thus, we need to
-    // get the container name from the parameter list.  We use "Dense"
+    // get the container name from the parameter list.  We use "TriDi"
     // as the default container type.
     containerType = containerType_;
   }
@@ -705,17 +717,30 @@ BlockRelaxation<MatrixType,ContainerType>::
 ApplyInverseJacobi (const MV& X, MV& Y) const
 {
   const size_t NumVectors = X.getNumVectors ();
-  typename ContainerType::HostView XView = X.template getLocalView<Kokkos::HostSpace>();
-  typename ContainerType::HostView YView = Y.template getLocalView<Kokkos::HostSpace>();
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
+  typename ContainerType::HostView XView = X.template getLocalView<Kokkos::HostSpace> ();
+  typename ContainerType::HostView YView = Y.template getLocalView<Kokkos::HostSpace> ();
+#else
+  auto XView = X.getLocalViewHost ();
+  auto YView = Y.getLocalViewHost ();
+#endif
   MV AY (Y.getMap (), NumVectors);
 
-  typename ContainerType::HostView AYView = AY.template getLocalView<Kokkos::HostSpace>();
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
+  typename ContainerType::HostView AYView = AY.template getLocalView<Kokkos::HostSpace> ();
+#else
+  auto AYView = AY.getLocalViewHost ();
+#endif
   // Initial matvec not needed
   int starting_iteration = 0;
   if (OverlapLevel_ > 0)
   {
     //Overlapping jacobi, with view of W_
-    typename ContainerType::HostView WView = W_->template getLocalView<Kokkos::HostSpace>();
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
+    typename ContainerType::HostView WView = W_->template getLocalView<Kokkos::HostSpace> ();
+#else
+    auto WView = W_->getLocalViewHost ();
+#endif
     if(ZeroStartingSolution_) {
       Container_->DoOverlappingJacobi(XView, YView, WView, X.getStride());
       starting_iteration = 1;
@@ -755,8 +780,13 @@ ApplyInverseGS (const MV& X, MV& Y) const
   using Teuchos::ptr;
   size_t numVecs = X.getNumVectors();
   //Get view of X (is never modified in this function)
-  typename ContainerType::HostView XView = X.template getLocalView<Kokkos::HostSpace>();
-  typename ContainerType::HostView YView = Y.template getLocalView<Kokkos::HostSpace>();
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
+  typename ContainerType::HostView XView = X.template getLocalView<Kokkos::HostSpace> ();
+  typename ContainerType::HostView YView = Y.template getLocalView<Kokkos::HostSpace> ();
+#else
+  auto XView = X.getLocalViewHost ();
+  auto YView = Y.getLocalViewHost ();
+#endif
   //Pre-import Y, if parallel
   Ptr<MV> Y2;
   bool deleteY2 = false;
@@ -773,13 +803,21 @@ ApplyInverseGS (const MV& X, MV& Y) const
     {
       //do import once per sweep
       Y2->doImport(Y, *Importer_, Tpetra::INSERT);
-      typename ContainerType::HostView Y2View = Y2->template getLocalView<Kokkos::HostSpace>();
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
+      typename ContainerType::HostView Y2View = Y2->template getLocalView<Kokkos::HostSpace> ();
+#else
+      auto Y2View = Y2->getLocalViewHost ();
+#endif
       Container_->DoGaussSeidel(XView, YView, Y2View, X.getStride());
     }
   }
   else
   {
-    typename ContainerType::HostView Y2View = Y2->template getLocalView<Kokkos::HostSpace>();
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
+    typename ContainerType::HostView Y2View = Y2->template getLocalView<Kokkos::HostSpace> ();
+#else
+    auto Y2View = Y2->getLocalViewHost ();
+#endif
     for(int j = 0; j < NumSweeps_; ++j)
     {
       Container_->DoGaussSeidel(XView, YView, Y2View, X.getStride());
@@ -797,8 +835,13 @@ ApplyInverseSGS (const MV& X, MV& Y) const
   using Teuchos::Ptr;
   using Teuchos::ptr;
   //Get view of X (is never modified in this function)
-  typename ContainerType::HostView XView = X.template getLocalView<Kokkos::HostSpace>();
-  typename ContainerType::HostView YView = Y.template getLocalView<Kokkos::HostSpace>();
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
+  typename ContainerType::HostView XView = X.template getLocalView<Kokkos::HostSpace> ();
+  typename ContainerType::HostView YView = Y.template getLocalView<Kokkos::HostSpace> ();
+#else
+  auto XView = X.getLocalViewHost ();
+  auto YView = Y.getLocalViewHost ();
+#endif
   //Pre-import Y, if parallel
   Ptr<MV> Y2;
   bool deleteY2 = false;
@@ -815,13 +858,21 @@ ApplyInverseSGS (const MV& X, MV& Y) const
     {
       //do import once per sweep
       Y2->doImport(Y, *Importer_, Tpetra::INSERT);
-      typename ContainerType::HostView Y2View = Y2->template getLocalView<Kokkos::HostSpace>();
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
+      typename ContainerType::HostView Y2View = Y2->template getLocalView<Kokkos::HostSpace> ();
+#else
+      auto Y2View = Y2->getLocalViewHost ();
+#endif
       Container_->DoSGS(XView, YView, Y2View, X.getStride());
     }
   }
   else
   {
-    typename ContainerType::HostView Y2View = Y2->template getLocalView<Kokkos::HostSpace>();
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
+    typename ContainerType::HostView Y2View = Y2->template getLocalView<Kokkos::HostSpace> ();
+#else
+    auto Y2View = Y2->getLocalViewHost ();
+#endif
     for(int j = 0; j < NumSweeps_; ++j)
     {
       Container_->DoSGS(XView, YView, Y2View, X.getStride());

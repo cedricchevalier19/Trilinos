@@ -29,7 +29,7 @@ namespace {
   static std::string Static_name     = "Static";
   static std::string Unlimited_name  = "Unlimited";
   static std::string Storage_name    = "Storage Type";
-  static std::string Storage_default = Unlimited_name;
+  static std::string Storage_default = Undo_name;
 
   static std::string StorageLimit_name    = "Storage Limit";
   static int         StorageLimit_default = 2;
@@ -236,7 +236,7 @@ void SolutionHistory<Scalar>::initWorkingState()
 
     // If workingState_ has a valid pointer, we are still working on it,
     // i.e., step failed and trying again, so do not initialize it.
-    if (getWorkingState() != Teuchos::null) return;
+    if (getWorkingState(false) != Teuchos::null) return;
 
     Teuchos::RCP<SolutionState<Scalar> > newState;
     if (getNumStates() < storageLimit_) {
@@ -246,7 +246,7 @@ void SolutionHistory<Scalar>::initWorkingState()
       // Recycle old state and copy currentState
       newState = (*history_)[0];
       history_->erase(history_->begin());
-      newState->copy(getCurrentState());
+      if (getNumStates() > 0) newState->copy(getCurrentState());
       // When using the Griewank algorithm, we will want to select which
       // older state to recycle.
     }
@@ -263,12 +263,20 @@ void SolutionHistory<Scalar>::promoteWorkingState()
 {
   Teuchos::RCP<SolutionStateMetaData<Scalar> > md =
     getWorkingState()->getMetaData();
-  md->setNFailures(std::max(0,md->getNFailures()-1));
-  md->setNConsecutiveFailures(0);
-  md->setSolutionStatus(Status::PASSED);
-  //md->setIsSynced(true);
-  md->setIsInterpolated(false);
-  workingState_ = Teuchos::null;
+
+  if ( md->getSolutionStatus() == Status::PASSED ) {
+    md->setNFailures(std::max(0,md->getNFailures()-1));
+    md->setNConsecutiveFailures(0);
+    md->setSolutionStatus(Status::PASSED);
+    //md->setIsSynced(true);
+    md->setIsInterpolated(false);
+    workingState_ = Teuchos::null;
+  } else {
+    Teuchos::RCP<Teuchos::FancyOStream> out = this->getOStream();
+    Teuchos::OSTab ostab(out,1,"SolutionHistory::promoteWorkingState()");
+    *out << "Warning - WorkingState is not passing, so not promoted!\n"
+         << std::endl;
+  }
 }
 
 

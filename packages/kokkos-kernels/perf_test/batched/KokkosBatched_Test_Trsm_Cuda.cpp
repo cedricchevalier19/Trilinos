@@ -523,13 +523,10 @@ namespace KokkosBatched {
           double tavg = 0, tmin = tmax;        
           {
             typedef Kokkos::TeamPolicy<DeviceSpaceType,ScheduleType,TeamTagV1> policy_type;
-            typedef typename policy_type::member_type member_type;
-
             typedef Functor<test,view_type,AlgoTagType,VectorLength> functor_type;
-            typedef Kokkos::Impl::ParallelFor<functor_type,policy_type,DeviceSpaceType> parallel_for_type;
- 
-            const int team_size =
-              Kokkos::Impl::cuda_get_opt_block_size<parallel_for_type>(functor_type(), VectorLength, 0, 0)/VectorLength;
+
+            const int team_size = 
+              policy_type(N/32, Kokkos::AUTO, VectorLength).team_size_recommended(functor_type(), Kokkos::ParallelForTag());
 
             const policy_type policy(N/team_size, team_size, VectorLength);
             for (int iter=iter_begin;iter<iter_end;++iter) {
@@ -589,11 +586,8 @@ namespace KokkosBatched {
           double tavg = 0, tmin = tmax;        
           {
             typedef Kokkos::TeamPolicy<DeviceSpaceType,ScheduleType,TeamTagV2> policy_type;
-            typedef typename policy_type::member_type member_type;
-
             typedef Functor<test,view_type,AlgoTagType,VectorLength> functor_type;
-            typedef Kokkos::Impl::ParallelFor<functor_type,policy_type,DeviceSpaceType> parallel_for_type;
- 
+
             const int
               is_blocked_algo = (std::is_same<AlgoTagType,Algo::Trsm::Blocked>::value),
               mb = Algo::Trsm::Blocked::mb<DeviceMemorySpaceType>(),
@@ -602,8 +596,9 @@ namespace KokkosBatched {
             const int
               mblk = is_blocked_algo ? (BlkSize/mb + mp) : BlkSize;
               
-            const int max_cuda_blocksize = Kokkos::Impl::cuda_get_max_block_size<parallel_for_type>(functor_type(), VectorLength, 0, 0);
-            const int team_size = min(max(NumCols,(mblk-1)*mblk), max_cuda_blocksize/VectorLength);
+            const int max_team_size = 
+              policy_type(N, Kokkos::AUTO, VectorLength).team_size_max(functor_type(), Kokkos::ParallelForTag());
+            const int team_size = std::min(std::max(NumCols,(mblk-1)*mblk), max_team_size);
 
             const policy_type policy(N, team_size, VectorLength);
             for (int iter=iter_begin;iter<iter_end;++iter) {
@@ -663,10 +658,7 @@ namespace KokkosBatched {
           double tavg = 0, tmin = tmax;        
           {
             typedef Kokkos::TeamPolicy<DeviceSpaceType,ScheduleType,TeamTagV3> policy_type;
-            typedef typename policy_type::member_type member_type;
-
             typedef Functor<test,view_type,AlgoTagType,VectorLength> functor_type;
-            typedef Kokkos::Impl::ParallelFor<functor_type,policy_type,DeviceSpaceType> parallel_for_type;
 
             const int lvl = 0, per_team_scratch 
               = ScratchViewType<view_type>::shmem_size(VectorLength, BlkSize, BlkSize);
@@ -679,11 +671,13 @@ namespace KokkosBatched {
 
               const int
                 mblk = is_blocked_algo ? (BlkSize/mb + mp) : BlkSize;
+              
+              const int max_team_size =
+                policy_type(N, Kokkos::AUTO, VectorLength).set_scratch_size(lvl, Kokkos::PerTeam(per_team_scratch))
+                .team_size_max(functor_type(), Kokkos::ParallelForTag());   
+              const int team_size = std::min(std::max(NumCols,(mblk-1)*mblk), max_team_size);
 
-              const int max_cuda_blocksize = Kokkos::Impl::cuda_get_max_block_size<parallel_for_type>(functor_type(), VectorLength, 0, 0);
-              const int team_size = min(max(NumCols,(mblk-1)*mblk), max_cuda_blocksize/VectorLength);
-
-              const policy_type policy(N, team_size, VectorLength);
+              policy_type policy(N, team_size, VectorLength);
               for (int iter=iter_begin;iter<iter_end;++iter) {
                 // flush
                 flush.run();
@@ -695,8 +689,7 @@ namespace KokkosBatched {
                 DeviceSpaceType::fence();
                 timer.reset();
             
-                Kokkos::parallel_for(policy.set_scratch_size(lvl, Kokkos::PerTeam(per_team_scratch)),
-                                     functor_type(a, b));
+                Kokkos::parallel_for(policy, functor_type(a, b));
 
                 DeviceSpaceType::fence();
                 const double t = timer.seconds();

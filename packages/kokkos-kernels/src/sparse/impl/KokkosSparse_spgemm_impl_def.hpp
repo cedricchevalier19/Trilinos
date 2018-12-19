@@ -118,8 +118,8 @@ void KokkosSPGEMM
 	}
 
     //number of rows and nnzs
-    nnz_lno_t n = this->row_mapB.dimension_0() - 1;
-    size_type nnz = this->entriesB.dimension_0();
+    nnz_lno_t n = this->row_mapB.extent(0) - 1;
+    size_type nnz = this->entriesB.extent(0);
     KokkosKernels::Impl::ExecSpaceType my_exec_space = KokkosKernels::Impl::get_exec_space_type<MyExecSpace>();
 
     bool compress_in_single_step = this->handle->get_spgemm_handle()->get_compression_step();
@@ -180,10 +180,10 @@ void KokkosSPGEMM
     	}
     }
     else {
-    	new_row_mapB = row_lno_temp_work_view_t ("");
-    	new_row_mapB_begins = row_lno_temp_work_view_t ("");
-    	set_index_entries = nnz_lno_temp_work_view_t ("");
-    	set_entries = nnz_lno_temp_work_view_t ("");
+    	new_row_mapB = row_lno_temp_work_view_t();
+    	new_row_mapB_begins = row_lno_temp_work_view_t();
+    	set_index_entries = nnz_lno_temp_work_view_t();
+    	set_entries = nnz_lno_temp_work_view_t();
     	nnz_lno_t maxNumRoughZeros = this->handle->get_spgemm_handle()->original_max_row_flops;
     	if (KOKKOSKERNELS_VERBOSE){
     		std::cout << "SYMBOLIC PHASE -- NO COMPRESSION: maxNumRoughZeros:" << maxNumRoughZeros << std::endl;

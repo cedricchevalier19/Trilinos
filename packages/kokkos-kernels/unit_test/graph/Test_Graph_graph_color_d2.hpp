@@ -120,7 +120,7 @@ void test_coloring_d2(lno_t numRows,size_type nnz, lno_t bandwidth, lno_t row_si
 
   KokkosKernels::Impl::symmetrize_graph_symbolic_hashmap<lno_view_t, lno_nnz_view_t,  typename lno_view_t::non_const_type, typename lno_nnz_view_t::non_const_type, device>
     (numRows, input_mat.graph.row_map, input_mat.graph.entries, sym_xadj, sym_adj);
-  size_type numentries = sym_adj.dimension_0();
+  size_type numentries = sym_adj.extent(0);
   scalar_view_t newValues("vals", numentries);
 
   graph_t static_graph (sym_adj, sym_xadj);
@@ -155,10 +155,7 @@ void test_coloring_d2(lno_t numRows,size_type nnz, lno_t bandwidth, lno_t row_si
    cp.destroy_spgemm_handle();
 
   int num_algorithms = 2;
-  KokkosKernels::Impl::ExecSpaceType my_exec_space = KokkosKernels::Impl::kk_get_exec_space_type<typename device::execution_space>();
-  if (my_exec_space == KokkosKernels::Impl::Exec_CUDA){
-    num_algorithms = 1; //for cuda dont run d2 for now.
-  }
+
   for (int ii = 0; ii < num_algorithms; ++ii){
 
 
@@ -228,7 +225,7 @@ TEST_F( TestCategory, graph ## _ ## graph_color_d2 ## _ ## SCALAR ## _ ## ORDINA
   test_coloring_d2<SCALAR,ORDINAL,OFFSET,DEVICE>(50000, 50000 * 30, 200, 10); \
   test_coloring_d2<SCALAR,ORDINAL,OFFSET,DEVICE>(50000, 50000 * 30, 100, 10); \
 }
-
+#if defined(KOKKOSKERNELS_INST_DOUBLE)
 #if (defined (KOKKOSKERNELS_INST_ORDINAL_INT) \
  && defined (KOKKOSKERNELS_INST_OFFSET_INT) ) || (!defined(KOKKOSKERNELS_ETI_ONLY) && !defined(KOKKOSKERNELS_IMPL_CHECK_ETI_CALLS))
  EXECUTE_TEST(double, int, int, TestExecSpace)
@@ -247,4 +244,5 @@ TEST_F( TestCategory, graph ## _ ## graph_color_d2 ## _ ## SCALAR ## _ ## ORDINA
 #if (defined (KOKKOSKERNELS_INST_ORDINAL_INT64_T) \
  && defined (KOKKOSKERNELS_INST_OFFSET_SIZE_T) ) || (!defined(KOKKOSKERNELS_ETI_ONLY) && !defined(KOKKOSKERNELS_IMPL_CHECK_ETI_CALLS))
  EXECUTE_TEST(double, int64_t, size_t, TestExecSpace)
+#endif
 #endif

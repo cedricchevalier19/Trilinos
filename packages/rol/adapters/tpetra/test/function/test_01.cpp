@@ -51,12 +51,10 @@
 
 #include "ROL_Types.hpp"
 
-#include "Teuchos_oblackholestream.hpp"
+#include "ROL_Stream.hpp"
 #include "Teuchos_GlobalMPISession.hpp"
 
-#include "Tpetra_DefaultPlatform.hpp"
-
-
+#include "Tpetra_Core.hpp"
  
 using Teuchos::ArrayRCP;
 
@@ -67,8 +65,6 @@ typedef Tpetra::Map<>::global_ordinal_type GO;
 typedef Tpetra::Map<>::node_type Node;
 typedef Tpetra::Map<LO, GO, Node> Map;
 typedef Tpetra::MultiVector<RealT, LO, GO, Node> MV;
-
-typedef Tpetra::DefaultPlatform::DefaultPlatformType Platform;
 
 typedef std::vector<RealT> SV;
 typedef ROL::Ptr<MV>            MVP;
@@ -121,7 +117,7 @@ int main(int argc, char *argv[]) {
 
     int iprint     = argc - 1;
     ROL::Ptr<std::ostream> outStream;
-    Teuchos::oblackholestream bhs; // outputs nothing
+    ROL::nullstream bhs; // outputs nothing
     Teuchos::GlobalMPISession mpiSession (&argc, &argv, &bhs);
 
     if (iprint > 0)
@@ -133,9 +129,7 @@ int main(int argc, char *argv[]) {
 
     try {
         
-        Platform &platform = Tpetra::DefaultPlatform::getDefaultPlatform();
-
-        ROL::Ptr<const Teuchos::Comm<int> > comm = platform.getComm();
+        ROL::Ptr<const Teuchos::Comm<int> > comm = Tpetra::getDefaultComm();
 
 
         // Maximum dimension of test for a given process

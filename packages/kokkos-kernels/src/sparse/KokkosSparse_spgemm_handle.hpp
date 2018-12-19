@@ -466,9 +466,9 @@ private:
     incidence_matrix_entries(),compress_second_matrix(true),
 
     multi_color_scale(1), mkl_sort_option(7), calculate_read_write_cost(false),
-	coloring_input_file(""),
-	coloring_output_file(""), min_hash_size_scale(1), compression_cut_off(0.85), first_level_hash_cut_off(0.50),
-	original_max_row_flops(std::numeric_limits<size_t>::max()), original_overall_flops(std::numeric_limits<size_t>::max()),
+    coloring_input_file(""),
+    coloring_output_file(""), min_hash_size_scale(1), compression_cut_off(0.85), first_level_hash_cut_off(0.50),
+    original_max_row_flops(std::numeric_limits<size_t>::max()), original_overall_flops(std::numeric_limits<size_t>::max()),
     persistent_a_xadj(), persistent_b_xadj(), persistent_a_adj(), persistent_b_adj(), MaxColDenseAcc(250001),
     mkl_keep_output(true),
     mkl_convert_to_1base(true), is_compression_single_step(false)
@@ -484,7 +484,7 @@ private:
 
   virtual ~SPGEMMHandle(){
 
-#ifdef KERNELS_HAVE_CUSgPARSE
+#ifdef KOKKOSKERNELS_ENABLE_TPL_CUSPARSE
     this->destroy_cuSPARSE_Handle();
 #endif
   };
@@ -508,7 +508,7 @@ private:
     /** \brief Chooses best algorithm based on the execution space. COLORING_EB if cuda, COLORING_VB otherwise.
    */
   void choose_default_algorithm(){
-#if defined( KOKKOS_HAVE_SERIAL )
+#if defined( KOKKOS_ENABLE_SERIAL )
     if (Kokkos::Impl::is_same< Kokkos::Serial , ExecutionSpace >::value){
       this->algorithm_type = SPGEMM_SERIAL;
 #ifdef VERBOSE
@@ -517,16 +517,16 @@ private:
     }
 #endif
 
-#if defined( KOKKOS_HAVE_PTHREAD )
+#if defined( KOKKOS_ENABLE_THREADS )
     if (Kokkos::Impl::is_same< Kokkos::Threads , ExecutionSpace >::value){
       this->algorithm_type = SPGEMM_SERIAL;
 #ifdef VERBOSE
-      std::cout << "PTHREAD Execution Space, Default Algorithm: SPGEMM_SERIAL" << std::endl;
+      std::cout << "THREADS Execution Space, Default Algorithm: SPGEMM_SERIAL" << std::endl;
 #endif
     }
 #endif
 
-#if defined( KOKKOS_HAVE_OPENMP )
+#if defined( KOKKOS_ENABLE_OPENMP )
     if (Kokkos::Impl::is_same< Kokkos::OpenMP, ExecutionSpace >::value){
       this->algorithm_type = SPGEMM_SERIAL;
 #ifdef VERBOSE
@@ -544,7 +544,7 @@ private:
     }
 #endif
 
-#if defined( KOKKOS_HAVE_QTHREAD)
+#if defined( KOKKOS_ENABLE_QTHREAD)
     if (Kokkos::Impl::is_same< Kokkos::Qthread, ExecutionSpace >::value){
       this->algorithm_type = SPGEMM_SERIAL;
 #ifdef VERBOSE
@@ -610,7 +610,7 @@ private:
       return;
     }
 
-#if defined( KOKKOS_HAVE_SERIAL )
+#if defined( KOKKOS_ENABLE_SERIAL )
     if (Kokkos::Impl::is_same< Kokkos::Serial , ExecutionSpace >::value){
       suggested_vector_size_ = this->suggested_vector_size = 1;
       suggested_team_size_ = this->suggested_team_size = max_allowed_team_size;
@@ -618,7 +618,7 @@ private:
     }
 #endif
 
-#if defined( KOKKOS_HAVE_PTHREAD )
+#if defined( KOKKOS_ENABLE_THREADS )
     if (Kokkos::Impl::is_same< Kokkos::Threads , ExecutionSpace >::value){
       suggested_vector_size_ = this->suggested_vector_size = 1;
       suggested_team_size_ = this->suggested_team_size = max_allowed_team_size;
@@ -626,7 +626,7 @@ private:
     }
 #endif
 
-#if defined( KOKKOS_HAVE_OPENMP )
+#if defined( KOKKOS_ENABLE_OPENMP )
     if (Kokkos::Impl::is_same< Kokkos::OpenMP, ExecutionSpace >::value){
       suggested_vector_size_ = this->suggested_vector_size = 1;
       suggested_team_size_ = this->suggested_team_size = max_allowed_team_size;
@@ -659,7 +659,7 @@ private:
     }
 #endif
 
-#if defined( KOKKOS_HAVE_QTHREAD)
+#if defined( KOKKOS_ENABLE_QTHREAD)
     if (Kokkos::Impl::is_same< Kokkos::Qthread, ExecutionSpace >::value){
       suggested_vector_size_ = this->suggested_vector_size = 1;
       suggested_team_size_ = this->suggested_team_size = max_allowed_team_size;

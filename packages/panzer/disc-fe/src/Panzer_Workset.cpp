@@ -60,12 +60,12 @@
 namespace panzer {
 
 void
-WorksetDetails::setup(const panzer::LocalMeshPartition<int,int> & partition,
+WorksetDetails::setup(const panzer::LocalMeshPartition<int,panzer::Ordinal64> & partition,
                       const panzer::WorksetNeeds & needs)
 {
 
 
-  const size_t num_cells = partition.local_cells.dimension_0();
+  const size_t num_cells = partition.local_cells.extent(0);
 
   _num_owned_cells = partition.num_owned_cells;
   _num_ghost_cells = partition.num_ghstd_cells;
@@ -96,9 +96,9 @@ void WorksetDetails::setupNeeds(Teuchos::RCP<const shards::CellTopology> cell_to
                                 const panzer::WorksetNeeds & needs)
 {
 
-  const size_t num_cells = cell_vertices.dimension_0();
-  const size_t num_vertices_per_cell = cell_vertices.dimension_1();
-  const size_t num_dims_per_vertex = cell_vertices.dimension_2();
+  const size_t num_cells = cell_vertices.extent(0);
+  const size_t num_vertices_per_cell = cell_vertices.extent(1);
+  const size_t num_dims_per_vertex = cell_vertices.extent(2);
 
   // Set cell vertices
   {
@@ -143,7 +143,7 @@ void WorksetDetails::setupNeeds(Teuchos::RCP<const shards::CellTopology> cell_to
     // Create and store integration values
     Teuchos::RCP<panzer::IntegrationValues2<double> > iv = Teuchos::rcp(new panzer::IntegrationValues2<double>("",true));
     iv->setupArrays(ir);
-    iv->evaluateValues(cell_vertex_coordinates);
+    iv->evaluateValues(cell_vertex_coordinates,num_cells);
     _integrator_map[integration_description.getKey()] = iv;
 
     // We need to generate a integration rule - basis pair for each basis
@@ -164,7 +164,9 @@ void WorksetDetails::setupNeeds(Teuchos::RCP<const shards::CellTopology> cell_to
                            iv->jac_det,
                            iv->jac_inv,
                            iv->weighted_measure,
-                           cell_vertex_coordinates);
+                           cell_vertex_coordinates,
+                           true,
+                           num_cells);
       } else if((ir->getType() == panzer::IntegrationDescriptor::CV_VOLUME)
           or (ir->getType() == panzer::IntegrationDescriptor::CV_SIDE)
           or (ir->getType() == panzer::IntegrationDescriptor::CV_BOUNDARY)){
@@ -178,7 +180,9 @@ void WorksetDetails::setupNeeds(Teuchos::RCP<const shards::CellTopology> cell_to
                            iv->jac_det,
                            iv->jac_inv,
                            iv->weighted_measure,
-                           cell_vertex_coordinates);
+                           cell_vertex_coordinates,
+                           true,
+                           num_cells);
       }
       _basis_map[basis_description.getKey()][integration_description.getKey()] = bv;
     }

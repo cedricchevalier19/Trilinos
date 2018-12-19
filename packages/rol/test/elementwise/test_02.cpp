@@ -48,10 +48,10 @@
 
 #include "ROL_TpetraMultiVector.hpp"
 
-#include "Teuchos_oblackholestream.hpp"
+#include "ROL_Stream.hpp"
 #include "Teuchos_GlobalMPISession.hpp"
 
-#include "Tpetra_DefaultPlatform.hpp"
+#include "Tpetra_Core.hpp"
 
 typedef double RealT;
 
@@ -100,12 +100,10 @@ public:
 int main(int argc, char *argv[]) {
   
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-  typedef Tpetra::DefaultPlatform::DefaultPlatformType Platform;
-  Platform &platform = Tpetra::DefaultPlatform::getDefaultPlatform();
-  ROL::Ptr<const Teuchos::Comm<int> > comm = platform.getComm();
+  ROL::Ptr<const Teuchos::Comm<int> > comm = ROL::toPtr(Tpetra::getDefaultComm());
 
   int iprint = argc - 1;
-  Teuchos::oblackholestream bhs; // outputs nothing
+  ROL::nullstream bhs; // outputs nothing
   std::ostream& outStream = (iprint > 0) ? std::cout : bhs;
 
   int errorFlag = 0;

@@ -48,10 +48,31 @@
 
 #include "MueLu_ConfigDefs.hpp"
 #include "MueLu_BaseClass.hpp"
-#include "MueLu_Utilities_fwd.hpp"
+#include "MueLu_ThresholdAFilterFactory_fwd.hpp"
+
+#include "MueLu_CoalesceDropFactory_fwd.hpp"
+#include "MueLu_CoarseMapFactory_fwd.hpp"
+#include "MueLu_CoordinatesTransferFactory_fwd.hpp"
 #include "MueLu_TentativePFactory_fwd.hpp"
-#include "MueLu_SaPFactory_fwd.hpp"
 #include "MueLu_UncoupledAggregationFactory_fwd.hpp"
+#include "MueLu_Utilities_fwd.hpp"
+
+#ifdef HAVE_MUELU_KOKKOS_REFACTOR
+#include "MueLu_CoalesceDropFactory_kokkos_fwd.hpp"
+#include "MueLu_CoarseMapFactory_kokkos_fwd.hpp"
+#include "MueLu_CoordinatesTransferFactory_kokkos_fwd.hpp"
+#include "MueLu_TentativePFactory_kokkos_fwd.hpp"
+#include "MueLu_Utilities_kokkos_fwd.hpp"
+#include "MueLu_UncoupledAggregationFactory_kokkos_fwd.hpp"
+#endif
+
+#include "MueLu_ZoltanInterface_fwd.hpp"
+#include "MueLu_Zoltan2Interface_fwd.hpp"
+#include "MueLu_RepartitionHeuristicFactory_fwd.hpp"
+#include "MueLu_RepartitionFactory_fwd.hpp"
+#include "MueLu_RebalanceAcFactory_fwd.hpp"
+#include "MueLu_RebalanceTransferFactory_fwd.hpp"
+
 #include "MueLu_SmootherFactory_fwd.hpp"
 #include "MueLu_TrilinosSmoother.hpp"
 #include "MueLu_Hierarchy.hpp"
@@ -60,21 +81,18 @@
 #include "Xpetra_Matrix_fwd.hpp"
 #include "Xpetra_MatrixFactory_fwd.hpp"
 #include "Xpetra_MultiVectorFactory_fwd.hpp"
+#include "Xpetra_VectorFactory_fwd.hpp"
 #include "Xpetra_CrsMatrixWrap_fwd.hpp"
-#include "Xpetra_BlockedCrsMatrix_fwd.hpp"
-#include "Xpetra_ExportFactory_fwd.hpp"
 
-#ifdef HAVE_MUELU_IFPACK2
+#if defined(HAVE_MUELU_IFPACK2) && (!defined(HAVE_MUELU_EPETRA) || defined(HAVE_MUELU_INST_DOUBLE_INT_INT))
 #include "Ifpack2_Preconditioner.hpp"
-#if defined(HAVE_TPETRA_INST_INT_INT)
 #include "Ifpack2_Hiptmair.hpp"
-#endif
 #endif
 
 namespace MueLu {
 
   /*!
-    @brief Preconditioner (wrapped as a Tpetra::Operator) for Maxwell's equations in curl-curl form.
+    @brief Preconditioner (wrapped as a Xpetra::Operator) for Maxwell's equations in curl-curl form.
 
     This uses a 2x2 block reformulation.
 
@@ -82,6 +100,20 @@ namespace MueLu {
     P. Bochev, J. Hu, C. Siefert, and R. Tuminaro. "An algebraic multigrid approach based on
     a compatible gauge reformulation of Maxwell's equations." SIAM Journal on Scientific
     Computing, 31(1), 557-583.
+
+    Parameter list options:
+    - <tt>refmaxwell: mode</tt> - a <tt>string</tt> specifying the order of solve of the block system.
+                                  Allowed values are: "additive" (default), "121", "212"
+    - <tt>refmaxwell: disable addon</tt> - <tt>bool</tt> specifing whether the addon should be built for stabilization.
+                                           Default: "true"
+    - <tt>refmaxwell: use as preconditioner</tt> - <tt>bool</tt> specifing whether RefMaxwell is used as a preconditioner or as a solver.
+    - <tt>refmaxwell: dump matrices</tt> - <tt>bool</tt> specifing whether the matrices should be dumped.
+                                           Default: "false"
+    - <tt>refmaxwell: prolongator compute algorithm</tt> - a <tt>string</tt> specifying the algorithm to build the prolongator.
+                                                           Allowed values are: "mat-mat" and "gustavson"
+    - <tt>refmaxwell: 11list</tt> and <tt>refmaxwell: 22list</tt> - parameter list for the multigrid hierarchies on 11 and 22 blocks
+    - <tt>refmaxwell: subsolves on subcommunicators</tt> - <tt>bool</tt> redistribute the two subsolves to disjoint sub-communicators (so that the additive solve can occur in parallel)
+                                           Default: "false"
 
     @ingroup MueLuAdapters
   */
@@ -97,6 +129,7 @@ namespace MueLu {
   public:
 
     typedef typename Teuchos::ScalarTraits<Scalar>::magnitudeType magnitudeType;
+    typedef typename Xpetra::MultiVector<magnitudeType,LO,GO,NO> RealValuedMultiVector;
 
     //! Constructor
     RefMaxwell() :
@@ -123,8 +156,8 @@ namespace MueLu {
      * \param[in] M0inv_Matrix Inverse of lumped nodal mass matrix (add on only)
      * \param[in] M1_Matrix Edge mass matrix for the
      * \param[in] Nullspace Null space (needed for periodic)
-     * \param[in] coords Nodal coordinates
-     * \param[in] precList Parameter list
+     * \param[in] Coords Nodal coordinates
+     * \param[in] List Parameter list
      * \param[in] ComputePrec If true, compute the preconditioner immediately
      */
     RefMaxwell(const Teuchos::RCP<Matrix> & SM_Matrix,
@@ -132,7 +165,7 @@ namespace MueLu {
                const Teuchos::RCP<Matrix> & M0inv_Matrix,
                const Teuchos::RCP<Matrix> & M1_Matrix,
                const Teuchos::RCP<MultiVector> & Nullspace,
-               const Teuchos::RCP<Xpetra::MultiVector<double, LocalOrdinal, GlobalOrdinal, Node> > & Coords,
+               const Teuchos::RCP<RealValuedMultiVector> & Coords,
                Teuchos::ParameterList& List,
                bool ComputePrec = true)
     {
@@ -151,14 +184,14 @@ namespace MueLu {
      * \param[in] M0inv_Matrix Inverse of lumped nodal mass matrix (add on only)
      * \param[in] M1_Matrix Edge mass matrix for the
      * \param[in] Nullspace Null space (needed for periodic)
-     * \param[in] coords Nodal coordinates
-     * \param[in] precList Parameter list
+     * \param[in] Coords Nodal coordinates
+     * \param[in] List Parameter list
      */
     RefMaxwell(const Teuchos::RCP<Matrix> & D0_Matrix,
                const Teuchos::RCP<Matrix> & M0inv_Matrix,
                const Teuchos::RCP<Matrix> & M1_Matrix,
                const Teuchos::RCP<MultiVector> & Nullspace,
-               const Teuchos::RCP<Xpetra::MultiVector<double, LocalOrdinal, GlobalOrdinal, Node> > & Coords,
+               const Teuchos::RCP<RealValuedMultiVector> & Coords,
                Teuchos::ParameterList& List) : SM_Matrix_(Teuchos::null)
     {
       initialize(D0_Matrix,M0inv_Matrix,M1_Matrix,Nullspace,Coords,List);
@@ -170,15 +203,15 @@ namespace MueLu {
      * \param[in] D0_Matrix Discrete Gradient
      * \param[in] M1_Matrix Edge mass matrix for the
      * \param[in] Nullspace Null space (needed for periodic)
-     * \param[in] coords Nodal coordinates
-     * \param[in] precList Parameter list
+     * \param[in] Coords Nodal coordinates
+     * \param[in] List Parameter list
      * \param[in] ComputePrec If true, compute the preconditioner immediately
      */
     RefMaxwell(const Teuchos::RCP<Matrix> & SM_Matrix,
                const Teuchos::RCP<Matrix> & D0_Matrix,
                const Teuchos::RCP<Matrix> & M1_Matrix,
                const Teuchos::RCP<MultiVector>  & Nullspace,
-               const Teuchos::RCP<Xpetra::MultiVector<double, LocalOrdinal, GlobalOrdinal, Node> >  & Coords,
+               const Teuchos::RCP<RealValuedMultiVector>  & Coords,
                Teuchos::ParameterList& List,
                bool ComputePrec = true)
     {
@@ -196,13 +229,13 @@ namespace MueLu {
      * \param[in] D0_Matrix Discrete Gradient
      * \param[in] M1_Matrix Edge mass matrix for the
      * \param[in] Nullspace Null space (needed for periodic)
-     * \param[in] coords Nodal coordinates
-     * \param[in] precList Parameter list
+     * \param[in] Coords Nodal coordinates
+     * \param[in] List Parameter list
      */
     RefMaxwell(const Teuchos::RCP<Matrix> & D0_Matrix,
                const Teuchos::RCP<Matrix> & M1_Matrix,
                const Teuchos::RCP<MultiVector>  & Nullspace,
-               const Teuchos::RCP<Xpetra::MultiVector<double, LocalOrdinal, GlobalOrdinal, Node> >  & Coords,
+               const Teuchos::RCP<RealValuedMultiVector>  & Coords,
                Teuchos::ParameterList& List) : SM_Matrix_(Teuchos::null)
     {
       initialize(D0_Matrix,Teuchos::null,M1_Matrix,Nullspace,Coords,List);
@@ -211,7 +244,7 @@ namespace MueLu {
     /** Constructor with parameter list
      *
      * \param[in] SM_Matrix Jacobian
-     * \param[in] precList Parameter list
+     * \param[in] List Parameter list
      * \param[in] ComputePrec If true, compute the preconditioner immediately
      */
     RefMaxwell(const Teuchos::RCP<Matrix> & SM_Matrix,
@@ -220,7 +253,7 @@ namespace MueLu {
     {
 
       RCP<MultiVector> Nullspace = List.get<RCP<MultiVector> >("Nullspace", Teuchos::null);
-      RCP<Xpetra::MultiVector<double, LocalOrdinal, GlobalOrdinal, Node> > Coords = List.get<RCP<Xpetra::MultiVector<double, LocalOrdinal, GlobalOrdinal, Node> > >("Coordinates", Teuchos::null);
+      RCP<RealValuedMultiVector> Coords = List.get<RCP<RealValuedMultiVector> >("Coordinates", Teuchos::null);
       RCP<Matrix> D0_Matrix = List.get<RCP<Matrix> >("D0");
       RCP<Matrix> M1_Matrix = List.get<RCP<Matrix> >("M1");
       RCP<Matrix> M0inv_Matrix = List.get<RCP<Matrix> >("M0inv", Teuchos::null);
@@ -264,18 +297,6 @@ namespace MueLu {
     //! Reset system matrix
     void resetMatrix(Teuchos::RCP<Matrix> SM_Matrix_new);
 
-    //! apply additive algorithm for 2x2 solve
-    void applyInverseAdditive(const MultiVector& RHS, MultiVector& X) const;
-
-    //! apply 1-2-1 algorithm for 2x2 solve
-    void applyInverse121(const MultiVector& RHS, MultiVector& X) const;
-
-    //! apply 2-1-2 algorithm for 2x2 solve
-    void applyInverse212(const MultiVector& RHS, MultiVector& X) const;
-
-    //! apply solve to 1-1 block only
-    void applyInverse11only(const MultiVector& RHS, MultiVector& X) const;
-
     //! Returns in Y the result of a Xpetra::Operator applied to a Xpetra::MultiVector X.
     //! \param[in]  X - MultiVector of dimension NumVectors to multiply with matrix.
     //! \param[out] Y - MultiVector of dimension NumVectors containing result.
@@ -295,6 +316,8 @@ namespace MueLu {
                             Hierarchy22_->template clone<NewNode> (new_node)));
     }
 
+    void describe(Teuchos::FancyOStream &out, const Teuchos::EVerbosityLevel verbLevel = Teuchos::VERB_HIGH) const;
+
   private:
 
     /** Initialize with matrices except the Jacobian (don't compute the preconditioner)
@@ -303,41 +326,64 @@ namespace MueLu {
      * \param[in] M0inv_Matrix Inverse of lumped nodal mass matrix (add on only)
      * \param[in] M1_Matrix Edge mass matrix
      * \param[in] Nullspace Null space (needed for periodic)
-     * \param[in] coords Nodal coordinates
-     * \param[in] precList Parameter list
+     * \param[in] Coords Nodal coordinates
+     * \param[in] List Parameter list
      */
     void initialize(const Teuchos::RCP<Matrix> & D0_Matrix,
                     const Teuchos::RCP<Matrix> & M0inv_Matrix,
                     const Teuchos::RCP<Matrix> & M1_Matrix,
                     const Teuchos::RCP<MultiVector> & Nullspace,
-                    const Teuchos::RCP<Xpetra::MultiVector<double, LocalOrdinal, GlobalOrdinal, Node> > & Coords,
+                    const Teuchos::RCP<RealValuedMultiVector> & Coords,
                     Teuchos::ParameterList& List);
+
+    //! solve coarse (1,1) block
+    void solveH() const;
+
+    //! solve (2,2) block
+    void solve22() const;
+
+    //! apply additive algorithm for 2x2 solve
+    void applyInverseAdditive(const MultiVector& RHS, MultiVector& X) const;
+
+    //! apply 1-2-1 algorithm for 2x2 solve
+    void applyInverse121(const MultiVector& RHS, MultiVector& X) const;
+
+    //! apply 2-1-2 algorithm for 2x2 solve
+    void applyInverse212(const MultiVector& RHS, MultiVector& X) const;
+
+    //! apply solve to 1-1 block only
+    void applyInverse11only(const MultiVector& RHS, MultiVector& X) const;
 
     //! Two hierarchies: one for the coarse (1,1)-block, another for the (2,2)-block
     Teuchos::RCP<Hierarchy> HierarchyH_, Hierarchy22_;
-    Teuchos::RCP<SmootherBase> Smoother_;
-#if defined(HAVE_MUELU_IFPACK2) && defined(HAVE_TPETRA_INST_INT_INT)
+    Teuchos::RCP<SmootherBase> PreSmoother_, PostSmoother_;
+#if defined(HAVE_MUELU_IFPACK2) && (!defined(HAVE_MUELU_EPETRA) || defined(HAVE_MUELU_INST_DOUBLE_INT_INT))
     Teuchos::RCP<Ifpack2::Preconditioner<Scalar,LocalOrdinal,GlobalOrdinal,Node> > hiptmairPreSmoother_, hiptmairPostSmoother_;
 #endif
     bool useHiptmairSmoothing_;
-    //! Top Level
-    Teuchos::RCP<Level> TopLevel_;
     //! Various matrices
-    Teuchos::RCP<Matrix> SM_Matrix_, D0_Matrix_, M0inv_Matrix_, M1_Matrix_, Ms_Matrix_;
-    Teuchos::RCP<Matrix> A_nodal_Matrix_, P11_, AH_, A22_;
+    Teuchos::RCP<Matrix> SM_Matrix_, D0_Matrix_, D0_T_Matrix_, M0inv_Matrix_, M1_Matrix_, Ms_Matrix_;
+    Teuchos::RCP<Matrix> A_nodal_Matrix_, P11_, R11_, AH_, A22_;
     //! Vectors for BCs
+#ifdef HAVE_MUELU_KOKKOS_REFACTOR
+    Kokkos::View<const bool*, typename Node::device_type> BCrowsKokkos_;
+    Kokkos::View<const bool*, typename Node::device_type> BCcolsKokkos_;
+#endif
     Teuchos::ArrayRCP<const bool> BCrows_;
     Teuchos::ArrayRCP<const bool> BCcols_;
     //! Nullspace
     Teuchos::RCP<MultiVector> Nullspace_;
-    Teuchos::RCP<Xpetra::MultiVector<double, LocalOrdinal, GlobalOrdinal, Node> > Coords_;
+    //! Coordinates
+    Teuchos::RCP<RealValuedMultiVector> Coords_, CoordsH_;
+    //! Importer to coarse (1,1) hierarchy
+    Teuchos::RCP<const Import> ImporterH_, Importer22_;
     //! Parameter lists
     Teuchos::ParameterList parameterList_, precList11_, precList22_, smootherList_;
     //! Some options
-    bool disable_addon_, dump_matrices_;
+    bool disable_addon_, dump_matrices_,useKokkos_,use_as_preconditioner_;
     std::string mode_;
     //! Temporary memory
-    mutable Teuchos::RCP<MultiVector> P11res_, P11x_, D0res_, D0x_, residual_;
+    mutable Teuchos::RCP<MultiVector> P11res_, P11x_, D0res_, D0x_, residual_, P11resTmp_, P11xTmp_, D0resTmp_, D0xTmp_;
   };
 
 } // namespace

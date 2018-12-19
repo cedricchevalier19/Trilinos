@@ -41,6 +41,7 @@ MACRO(TRILINOS_SYSTEM_SPECIFIC_CTEST_DRIVER)
   SET( CTEST_NOTES_FILES
     ${CTEST_NOTES_FILES}
     "${TRIBITS_PROJECT_ROOT}/cmake/std/atdm/$ENV{ATDM_CONFIG_KNOWN_SYSTEM_NAME}/environment.sh"
+    "${THIS_FILE_LIST_DIR}/$ENV{ATDM_CONFIG_KNOWN_SYSTEM_NAME}/drivers/$ENV{JOB_NAME}.sh"
     "${CMAKE_CURRENT_LIST_FILE}"
     )
   
@@ -48,33 +49,49 @@ MACRO(TRILINOS_SYSTEM_SPECIFIC_CTEST_DRIVER)
   
   IF ($ENV{ATDM_CONFIG_USE_NINJA})
     SET(CTEST_CMAKE_GENERATOR Ninja)
-    SET(CTEST_BUILD_FLAGS "-k 999999")
+    IF ("$ENV{ATDM_CONFIG_BUILD_COUNT}" GREATER "0")
+      SET(CTEST_BUILD_FLAGS "-j$ENV{ATDM_CONFIG_BUILD_COUNT} ")
+    ELSE()
+      SET(CTEST_BUILD_FLAGS "")
+    ENDIF()
+    SET(CTEST_BUILD_FLAGS "${CTEST_BUILD_FLAGS}-k 999999")
   ELSE()
     SET(CTEST_CMAKE_GENERATOR "Unix Makefiles")
     SET(CTEST_BUILD_FLAGS "-j$ENV{ATDM_CONFIG_BUILD_COUNT} -k")
   ENDIF()
+  ATDM_SET_CACHE(CTEST_BUILD_FLAGS "${CTEST_BUILD_FLAGS}" CACHE STRING)
+  # NOTE: Above, we need to set this as a cache var because this var is also
+  # set as a cache var in ATDMDevEnvSettings.cmake that gets included below.
   
   SET(EXTRA_CONFIGURE_OPTIONS)
-  
-  # Must set the site name so that it does not change depending on what node
-  # runs the build.
-  SET(CTEST_SITE "$ENV{ATDM_CONFIG_KNOWN_HOSTNAME}")
 
   # See if to enable all of the packages
-
   MESSAGE("ENV ATDM_CONFIG_ENABLE_ALL_PACKAGE = $ENV{ATDM_CONFIG_ENABLE_ALL_PACKAGES}")
-
   IF ($ENV{ATDM_CONFIG_ENABLE_ALL_PACKAGES})
     SET(ATDM_ENABLE_ALL_PACKAGES TRUE)
   ELSE()
     SET(ATDM_ENABLE_ALL_PACKAGES FALSE)
   ENDIF()
 
+  # Get set of options files (must be relative to base Trilinos dir!)
+  MESSAGE("ENV ATDM_CONFIG_CONFIGURE_OPTIONS_FILES = $ENV{ATDM_CONFIG_CONFIGURE_OPTIONS_FILES}")
+  IF (NOT "$ENV{ATDM_CONFIG_CONFIGURE_OPTIONS_FILES}" STREQUAL "")
+    SET(ATDM_CONFIGURE_OPTIONS_FILES $ENV{ATDM_CONFIG_CONFIGURE_OPTIONS_FILES})
+  ELSE()
+    SET(ATDM_CONFIGURE_OPTIONS_FILES cmake/std/atdm/ATDMDevEnv.cmake)
+  ENDIF()
+  PRINT_VAR(ATDM_CONFIGURE_OPTIONS_FILES)
+
+  MESSAGE("Include the configure options files at the top level to influence what package get enabled or disabled ...")
+  FOREACH (CONFIG_OPTIONS_FILE ${ATDM_CONFIGURE_OPTIONS_FILES})
+    SET(CONFIG_OPTIONS_FILE "${TRIBITS_PROJECT_ROOT}/${CONFIG_OPTIONS_FILE}")
+    MESSAGE("Including ${CONFIG_OPTIONS_FILE} ...")
+    INCLUDE("${CONFIG_OPTIONS_FILE}")
+  ENDFOREACH()
+
   # See if "panzer" is in the job name
   STRING(REGEX MATCH "panzer" ATDM_PANZER_IN_JOB_NAME
     "${CTEST_BUILD_NAME}" )
-
-  SET(PANZER_DISABLE_EXAMPLES_ARGS)
 
   IF (ATDM_ENABLE_ALL_PACKAGES)
     MESSAGE("Enabling all packages by default!")
@@ -82,66 +99,18 @@ MACRO(TRILINOS_SYSTEM_SPECIFIC_CTEST_DRIVER)
   ELSEIF (ATDM_PANZER_IN_JOB_NAME)
     MESSAGE("Found 'panzer' in JOB_NAME, enabling only Panzer tests")
     SET(Trilinos_PACKAGES Panzer)
-    SET(PANZER_DISABLE_EXAMPLES_ARGS
-      "-DPanzer_ENABLE_EXAMPLES=OFF"
-      "-DPanzerCore_ENABLE_EXAMPLES=OFF"
-      "-DPanzerDofMgr_ENABLE_EXAMPLES=OFF"
-      "-DPanzerDiscFE_ENABLE_EXAMPLES=OFF"
-      "-DPanzerAdaptersSTK_ENABLE_EXAMPLES=OFF"
-      "-DPanzerAdaptersIOSS_ENABLE_EXAMPLES=OFF"
-      "-DPanzerMiniEM_ENABLE_EXAMPLES=OFF"
-      )
   ELSE()
-    # Explictly test an important subset of Trilinos packages used by the ATDM
-    # APP codes that are under active development.
-    SET(Trilinos_PACKAGES
-      Kokkos
-      Teuchos
-      KokkosKernels
-      Sacado
-      Tpetra
-      TrilinosSS
-      Thyra
-      Xpetra
-      Zoltan2
-      Belos
-      Amesos2
-      SEACAS
-      Anasazi
-      Ifpack2
-      Stratimikos
-      Teko
-      Intrepid2
-      STK
-      Phalanx
-      NOX
-      MueLu
-      Rythmos
-      Tempus
-      Piro
-      Panzer
-      )
-    # NOTE: Above, we explicilty list out the packages that we want to be tested
-    # which is *not* the full set of packages used by the ATDM APP codes.  The
-    # other packages are not actively developed and are at less of a risk to be
-    # broken.
-  ENDIF()
-  
-  IF (NOT ATDM_ENABLE_ALL_PACKAGES)
-    # Disable the packages that are never used by the ATDM APP codes
-    INCLUDE("${THIS_FILE_LIST_DIR}/../../../std/atdm/ATDMDisables.cmake")
-    SET(ATDM_DISABLES_FILE_ARG ",cmake/std/atdm/ATDMDisables.cmake")
-  ELSE()
-    MESSAGE("NOT reading in ATDMDisables.cmake!")
-    SET(ATDM_DISABLES_FILE_ARG "")
+    MESSAGE("Enabling all packages not otherwise disabled!")
+    SET(Trilinos_PACKAGES)
+    # Implicitly allow the enable of all packages that are not otherwise
+    # disabled by the (indirect) include of ATDMDisables.cmake.
   ENDIF()
 
   # Point to the ATDM Trilinos configuration
   SET(EXTRA_SYSTEM_CONFIGURE_OPTIONS
-    "-DTrilinos_CONFIGURE_OPTIONS_FILE:STRING=cmake/std/atdm/ATDMDevEnvSettings.cmake${ATDM_DISABLES_FILE_ARG}"
+    "-DTrilinos_CONFIGURE_OPTIONS_FILE:STRING=${ATDM_CONFIGURE_OPTIONS_FILES}"
     "-DTrilinos_TRACE_ADD_TEST=ON"
     "-DTrilinos_ENABLE_CONFIGURE_TIMING=ON"
-    ${PANZER_DISABLE_EXAMPLES_ARGS}
     )
 
   # Don't bother processing packages that are only implicitly enabled due to
@@ -168,8 +137,23 @@ MACRO(TRILINOS_SYSTEM_SPECIFIC_CTEST_DRIVER)
   # CDash error emails for any failures.  But when the build is clean, the var
   # Trilinos_TRACK should be overridden to be "ATDM" on a build-by-build
   # basis.
-  SET_DEFAULT(CTEST_TEST_TYPE Nightly)
+  SET_DEFAULT_AND_FROM_ENV(CTEST_TEST_TYPE Nightly)
   SET_DEFAULT(Trilinos_TRACK Specialized)
+  
+  IF (CTEST_TEST_TYPE STREQUAL "Experimental")
+    # For "Experimental" builds, set the CDash site name to the real hostname.
+    # This is done so that using queryTests.php will not pick up tests from
+    # "Experimental" builds with the same 'site' and 'buildname' as builds in
+    # the "Specialized" and "ATDM" groups.
+    SET(CTEST_SITE "$ENV{ATDM_CONFIG_REAL_HOSTNAME}")
+    SET(CTEST_BUILD_NAME "$ENV{JOB_NAME}-exp")
+  ELSE()
+    # For regular builds ("Specialized" and "ATDM"), set the CDash site name
+    # so that it does not change depending on what node on a given machine
+    # runs the build.  If you don't, CDash can't compare to previous builds
+    # for the number of new warnings, errors, tests, etc.
+    SET(CTEST_SITE "$ENV{ATDM_CONFIG_KNOWN_HOSTNAME}")
+  ENDIF()
 
   # Don't process any extra repos
   SET(Trilinos_EXTRAREPOS_FILE NONE)

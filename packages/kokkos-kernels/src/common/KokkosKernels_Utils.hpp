@@ -88,6 +88,7 @@ void get_histogram(
   kk_get_histogram<in_lno_view_t, out_lno_view_t, MyExecSpace>(in_elements, in_view, histogram);
 }
 
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
 template <typename idx, typename ExecutionSpace>
 void get_suggested_vector_team_size(
     int max_allowed_team_size,
@@ -95,21 +96,25 @@ void get_suggested_vector_team_size(
     int &suggested_team_size_,
     idx nr, idx nnz){
 
-#if defined( KOKKOS_HAVE_SERIAL )
+
+    suggested_vector_size_ =  1;
+    suggested_team_size_ = 1;
+
+#if defined( KOKKOS_ENABLE_SERIAL )
   if (Kokkos::Impl::is_same< Kokkos::Serial , ExecutionSpace >::value){
     suggested_vector_size_ =  1;
     suggested_team_size_ = 1;
   }
 #endif
 
-#if defined( KOKKOS_HAVE_PTHREAD )
+#if defined( KOKKOS_ENABLE_THREADS )
   if (Kokkos::Impl::is_same< Kokkos::Threads , ExecutionSpace >::value){
     suggested_vector_size_ =  1;
     suggested_team_size_ =  1;
   }
 #endif
 
-#if defined( KOKKOS_HAVE_OPENMP )
+#if defined( KOKKOS_ENABLE_OPENMP )
   if (Kokkos::Impl::is_same< Kokkos::OpenMP, ExecutionSpace >::value){
     suggested_vector_size_ =  1;
     suggested_team_size_ = 1;
@@ -141,7 +146,7 @@ void get_suggested_vector_team_size(
   }
 #endif
 
-#if defined( KOKKOS_HAVE_QTHREAD)
+#if defined( KOKKOS_ENABLE_QTHREAD)
   if (Kokkos::Impl::is_same< Kokkos::Qthread, ExecutionSpace >::value){
     suggested_vector_size_ = 1;
     suggested_team_size_ = 1;
@@ -150,6 +155,104 @@ void get_suggested_vector_team_size(
 
 }
 
+#else
+template <typename idx, typename ExecutionSpace>
+void get_suggested_vector_size(
+    int &suggested_vector_size_,
+    idx nr, idx nnz){
+
+    suggested_vector_size_ =  1;
+
+#if defined( KOKKOS_ENABLE_SERIAL )
+  if (Kokkos::Impl::is_same< Kokkos::Serial , ExecutionSpace >::value){
+    suggested_vector_size_ =  1;
+  }
+#endif
+
+#if defined( KOKKOS_ENABLE_THREADS )
+  if (Kokkos::Impl::is_same< Kokkos::Threads , ExecutionSpace >::value){
+    suggested_vector_size_ =  1;
+  }
+#endif
+
+#if defined( KOKKOS_ENABLE_OPENMP )
+  if (Kokkos::Impl::is_same< Kokkos::OpenMP, ExecutionSpace >::value){
+    suggested_vector_size_ =  1;
+  }
+#endif
+
+#if defined( KOKKOS_ENABLE_CUDA )
+  if (Kokkos::Impl::is_same<Kokkos::Cuda, ExecutionSpace >::value){
+
+    suggested_vector_size_ = nnz / double (nr) + 0.5;
+
+    if (suggested_vector_size_ <= 3){
+      suggested_vector_size_ = 2;
+    }
+    else if (suggested_vector_size_ <= 6){
+      suggested_vector_size_ = 4;
+    }
+    else if (suggested_vector_size_ <= 12){
+      suggested_vector_size_ = 8;
+    }
+    else if (suggested_vector_size_ <= 24){
+      suggested_vector_size_ = 16;
+    }
+    else {
+      suggested_vector_size_ = 32;
+    }
+  }
+#endif
+
+#if defined( KOKKOS_ENABLE_QTHREAD)
+  if (Kokkos::Impl::is_same< Kokkos::Qthread, ExecutionSpace >::value){
+    suggested_vector_size_ = 1;
+  }
+#endif
+
+}
+
+
+template <typename ExecutionSpace>
+void get_suggested_team_size(
+    int max_allowed_team_size,
+    int suggested_vector_size,
+    int &suggested_team_size_){
+
+    suggested_team_size_ = 1;
+
+#if defined( KOKKOS_ENABLE_SERIAL )
+  if (Kokkos::Impl::is_same< Kokkos::Serial , ExecutionSpace >::value){
+    suggested_team_size_ = 1;
+  }
+#endif
+
+#if defined( KOKKOS_ENABLE_THREADS )
+  if (Kokkos::Impl::is_same< Kokkos::Threads , ExecutionSpace >::value){
+    suggested_team_size_ =  1;
+  }
+#endif
+
+#if defined( KOKKOS_ENABLE_OPENMP )
+  if (Kokkos::Impl::is_same< Kokkos::OpenMP, ExecutionSpace >::value){
+    suggested_team_size_ = 1;
+  }
+#endif
+
+#if defined( KOKKOS_ENABLE_CUDA )
+  if (Kokkos::Impl::is_same<Kokkos::Cuda, ExecutionSpace >::value){
+    suggested_team_size_ = max_allowed_team_size / suggested_vector_size;
+  }
+#endif
+
+#if defined( KOKKOS_ENABLE_QTHREAD)
+  if (Kokkos::Impl::is_same< Kokkos::Qthread, ExecutionSpace >::value){
+    suggested_team_size_ = 1;
+  }
+#endif
+
+}
+#endif
 
 
 template <typename idx_array_type,
@@ -173,7 +276,7 @@ struct FillSymmetricEdges{
 
     idx_out_edge_array_type srcs_,
     idx_out_edge_array_type dsts_
-    ):num_rows(num_rows_),nnz(adj_.dimension_0()), xadj(xadj_), adj(adj_), srcs(srcs_), dsts(dsts_){}
+    ):num_rows(num_rows_),nnz(adj_.extent(0)), xadj(xadj_), adj(adj_), srcs(srcs_), dsts(dsts_){}
 
   KOKKOS_INLINE_FUNCTION
   void operator()(const team_member & teamMember) const {
@@ -223,7 +326,7 @@ struct FillSymmetricEdgesHashMap{
     in_lno_nnz_view_t adj_,
     hashmap_t hashmap_,
     out_lno_row_view_t pre_pps_
-    ):num_rows(num_rows_),nnz(adj_.dimension_0()), xadj(xadj_), adj(adj_),
+    ):num_rows(num_rows_),nnz(adj_.extent(0)), xadj(xadj_), adj(adj_),
         umap(hashmap_), pre_pps(pre_pps_){}
 
   KOKKOS_INLINE_FUNCTION
@@ -291,7 +394,7 @@ struct FillSymmetricLowerEdgesHashMap{
     hashmap_t hashmap_,
     out_lno_row_view_t pre_pps_,
     bool lower_only_ = false
-    ):num_rows(num_rows_),nnz(adj_.dimension_0()), xadj(xadj_), adj(adj_),
+    ):num_rows(num_rows_),nnz(adj_.extent(0)), xadj(xadj_), adj(adj_),
         umap(hashmap_), pre_pps(pre_pps_){}
 
   KOKKOS_INLINE_FUNCTION
@@ -353,7 +456,7 @@ struct FillSymmetricCRS_HashMap{
         hashmap_t hashmap_,
         out_lno_row_view_t pre_pps_,
         out_lno_nnz_view_t sym_adj_):
-            num_rows(num_rows_),nnz(adj_.dimension_0()),
+            num_rows(num_rows_),nnz(adj_.extent(0)),
       xadj(xadj_), adj(adj_),
       umap(hashmap_), pre_pps(pre_pps_), sym_adj(sym_adj_){}
 
@@ -425,7 +528,7 @@ struct FillSymmetricEdgeList_HashMap{
         out_lno_nnz_view_t sym_src_,
         out_lno_nnz_view_t sym_dst_,
         out_lno_row_view_t pps_):
-            num_rows(num_rows_),nnz(adj_.dimension_0()),
+            num_rows(num_rows_),nnz(adj_.extent(0)),
       xadj(xadj_), adj(adj_),
       umap(hashmap_), sym_src(sym_src_), sym_dst(sym_dst_), pps(pps_){}
 
@@ -830,7 +933,7 @@ struct PermuteVector{
       value_array_type old_vector_,
       out_value_array_type new_vector_,
       idx_array_type old_to_new_mapping_):
-        old_vector(old_vector_), new_vector(new_vector_),old_to_new_mapping(old_to_new_mapping_), mapping_size(old_to_new_mapping_.dimension_0()){}
+        old_vector(old_vector_), new_vector(new_vector_),old_to_new_mapping(old_to_new_mapping_), mapping_size(old_to_new_mapping_.extent(0)){}
 
   KOKKOS_INLINE_FUNCTION
   void operator()(const idx &ii) const {
@@ -854,6 +957,51 @@ void permute_vector(
       PermuteVector<value_array_type, out_value_array_type, idx_array_type>(old_vector, new_vector, old_to_new_index_map));
 
 }
+
+
+template <typename value_array_type, typename out_value_array_type, typename idx_array_type>
+struct PermuteBlockVector{
+  typedef typename idx_array_type::value_type idx;
+  int block_size;
+  value_array_type old_vector;
+  out_value_array_type new_vector;
+  idx_array_type old_to_new_mapping;
+  idx mapping_size;
+  PermuteBlockVector(
+      int block_size_,
+      value_array_type old_vector_,
+      out_value_array_type new_vector_,
+      idx_array_type old_to_new_mapping_):
+    	  block_size(block_size_),
+        old_vector(old_vector_), new_vector(new_vector_),old_to_new_mapping(old_to_new_mapping_), mapping_size(old_to_new_mapping_.extent(0)){}
+
+  KOKKOS_INLINE_FUNCTION
+  void operator()(const idx &ii) const {
+
+    idx mapping = ii;
+    if (ii < mapping_size) mapping = old_to_new_mapping[ii];
+
+    for (int i = 0; i < block_size; ++i){
+    	new_vector[mapping*block_size + i] = old_vector[ii * block_size + i];
+    }
+  }
+};
+
+template <typename value_array_type, typename out_value_array_type, typename idx_array_type, typename MyExecSpace>
+void permute_block_vector(
+    typename idx_array_type::value_type num_elements,
+	int block_size,
+    idx_array_type &old_to_new_index_map,
+    value_array_type &old_vector,
+    out_value_array_type &new_vector
+    ){
+  typedef Kokkos::RangePolicy<MyExecSpace> my_exec_space;
+
+  Kokkos::parallel_for("KokkosKernels::Impl::PermuteVector", my_exec_space(0,num_elements),
+		  PermuteBlockVector<value_array_type, out_value_array_type, idx_array_type>(block_size, old_vector, new_vector, old_to_new_index_map));
+
+}
+
 
 template <typename value_array_type, typename MyExecSpace>
 void zero_vector(
@@ -949,7 +1097,7 @@ void symmetrize_and_get_lower_diagonal_edge_list(
   typedef typename in_lno_row_view_t::non_const_value_type idx;
 
 
-  idx nnz = adj.dimension_0();
+  idx nnz = adj.extent(0);
 
   //idx_out_edge_array_type tmp_srcs("tmpsrc", nnz * 2);
   //idx_out_edge_array_type tmp_dsts("tmpdst",nnz * 2);
@@ -981,13 +1129,27 @@ void symmetrize_and_get_lower_diagonal_edge_list(
 
     int teamSizeMax = 0;
     int vector_size = 0;
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
     int max_allowed_team_size = team_policy::team_size_max(fse);
 
     get_suggested_vector_team_size<idx, MyExecSpace>(
         max_allowed_team_size,
         vector_size,
         teamSizeMax,
-        xadj.dimension_0() - 1, nnz);
+        xadj.extent(0) - 1, nnz);
+#else
+    get_suggested_vector_size<idx, MyExecSpace>(
+        vector_size,
+        xadj.extent(0) - 1, nnz);
+
+    team_policy tmp_policy(num_rows_to_symmetrize, Kokkos::AUTO, vector_size);
+    int max_allowed_team_size = tmp_policy.team_size_max( fse, Kokkos::ParallelForTag() );
+
+    get_suggested_team_size<MyExecSpace>(
+        max_allowed_team_size,
+        vector_size,
+        teamSizeMax);
+#endif
     //std::cout << "max_allowed_team_size:" << max_allowed_team_size << " vs:" << vector_size << " tsm:" << teamSizeMax<< std::endl;
 
     Kokkos::parallel_for(
@@ -1011,7 +1173,7 @@ void symmetrize_and_get_lower_diagonal_edge_list(
   typename out_lno_nnz_view_t::HostMirror h_sym_edge_size = Kokkos::create_mirror_view (pre_pps_);
 
   Kokkos::deep_copy (h_sym_edge_size , pre_pps_);
-  num_symmetric_edges = h_sym_edge_size(h_sym_edge_size.dimension_0() - 1);
+  num_symmetric_edges = h_sym_edge_size(h_sym_edge_size.extent(0) - 1);
   */
 
 
@@ -1027,13 +1189,27 @@ void symmetrize_and_get_lower_diagonal_edge_list(
 
     int teamSizeMax = 0;
     int vector_size = 0;
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
     int max_allowed_team_size = team_policy::team_size_max(FSCH);
 
     get_suggested_vector_team_size<idx, MyExecSpace>(
         max_allowed_team_size,
         vector_size,
         teamSizeMax,
-        xadj.dimension_0() - 1, nnz);
+        xadj.extent(0) - 1, nnz);
+#else
+    get_suggested_vector_size<idx, MyExecSpace>(
+        vector_size,
+        xadj.extent(0) - 1, nnz);
+
+    team_policy tmp_policy(num_rows_to_symmetrize, Kokkos::AUTO, vector_size);
+    int max_allowed_team_size = tmp_policy.team_size_max( FSCH, Kokkos::ParallelForTag() );
+
+    get_suggested_team_size<MyExecSpace>(
+        max_allowed_team_size,
+        vector_size,
+        teamSizeMax);
+#endif
 
     Kokkos::parallel_for(
         team_policy(num_rows_to_symmetrize / teamSizeMax + 1 , teamSizeMax, vector_size),
@@ -1065,7 +1241,7 @@ void symmetrize_graph_symbolic_hashmap(
 
   typedef typename in_lno_row_view_t::non_const_value_type idx;
 
-  idx nnz = adj.dimension_0();
+  idx nnz = adj.extent(0);
 
 
   //idx_out_edge_array_type tmp_srcs("tmpsrc", nnz * 2);
@@ -1098,14 +1274,27 @@ void symmetrize_graph_symbolic_hashmap(
 
     int teamSizeMax = 0;
     int vector_size = 0;
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
     int max_allowed_team_size = team_policy::team_size_max(fse);
 
     get_suggested_vector_team_size<idx, MyExecSpace>(
         max_allowed_team_size,
         vector_size,
         teamSizeMax,
-        xadj.dimension_0() - 1, nnz);
+        xadj.extent(0) - 1, nnz);
+#else
+    get_suggested_vector_size<idx, MyExecSpace>(
+        vector_size,
+        xadj.extent(0) - 1, nnz);
 
+    team_policy tmp_policy(num_rows_to_symmetrize, Kokkos::AUTO, vector_size);
+    int max_allowed_team_size = tmp_policy.team_size_max( fse, Kokkos::ParallelForTag() );
+
+    get_suggested_team_size<MyExecSpace>(
+        max_allowed_team_size,
+        vector_size,
+        teamSizeMax);
+#endif
 
     Kokkos::parallel_for(
         team_policy(num_rows_to_symmetrize / teamSizeMax + 1 , teamSizeMax, vector_size),
@@ -1125,7 +1314,7 @@ void symmetrize_graph_symbolic_hashmap(
   typename out_lno_row_view_t::HostMirror h_sym_edge_size = Kokkos::create_mirror_view (pre_pps_);
 
   Kokkos::deep_copy (h_sym_edge_size , pre_pps_);
-  num_symmetric_edges = h_sym_edge_size(h_sym_edge_size.dimension_0() - 1);
+  num_symmetric_edges = h_sym_edge_size(h_sym_edge_size.extent(0) - 1);
 
 
   sym_adj = out_lno_nnz_view_t(Kokkos::ViewAllocateWithoutInitializing("sym_adj"), num_symmetric_edges);
@@ -1141,13 +1330,27 @@ void symmetrize_graph_symbolic_hashmap(
 
     int teamSizeMax = 0;
     int vector_size = 0;
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
     int max_allowed_team_size = team_policy::team_size_max(FSCH);
 
     get_suggested_vector_team_size<idx, MyExecSpace>(
         max_allowed_team_size,
         vector_size,
         teamSizeMax,
-        xadj.dimension_0() - 1, nnz);
+        xadj.extent(0) - 1, nnz);
+#else
+    get_suggested_vector_size<idx, MyExecSpace>(
+        vector_size,
+        xadj.extent(0) - 1, nnz);
+
+    team_policy tmp_policy(num_rows_to_symmetrize, Kokkos::AUTO, vector_size);
+    int max_allowed_team_size = tmp_policy.team_size_max( FSCH, Kokkos::ParallelForTag() );
+
+    get_suggested_team_size<MyExecSpace>(
+        max_allowed_team_size,
+        vector_size,
+        teamSizeMax);
+#endif
 
     Kokkos::parallel_for(
         team_policy(num_rows_to_symmetrize / teamSizeMax + 1 , teamSizeMax, vector_size),
@@ -1273,6 +1476,8 @@ void view_reduce_sum(size_t num_elements, view_type view_to_reduce, typename vie
   typedef Kokkos::RangePolicy<MyExecSpace> my_exec_space;
   Kokkos::parallel_reduce( my_exec_space(0,num_elements), ReduceSumFunctor<view_type>(view_to_reduce), sum_reduction);
 }
+
+
 
 
 
@@ -1563,7 +1768,7 @@ void transpose_matrix(
   typedef typename TransposeFunctor_t::team_count_policy_t tcp_t;
   typedef typename TransposeFunctor_t::team_fill_policy_t tfp_t;
 
-  typename in_row_view_t::non_const_value_type nnz = adj.dimension_0();
+  typename in_row_view_t::non_const_value_type nnz = adj.extent(0);
   int vector_size = get_suggested_vector__size(num_rows, nnz, get_exec_space_type<MyExecSpace>());
 
   Kokkos::Impl::Timer timer1;
@@ -1641,7 +1846,7 @@ void transpose_graph2(
   typedef typename TransposeFunctor_t::team_count_policy_t tcp_t;
   typedef typename TransposeFunctor_t::team_fill_policy_t tfp_t;
 
-  typename in_row_view_t::non_const_value_type nnz = adj.dimension_0();
+  typename in_row_view_t::non_const_value_type nnz = adj.extent(0);
   int vector_size = get_suggested_vector__size(num_rows, nnz, get_exec_space_type<MyExecSpace>());
 
   Kokkos::Impl::Timer timer1;

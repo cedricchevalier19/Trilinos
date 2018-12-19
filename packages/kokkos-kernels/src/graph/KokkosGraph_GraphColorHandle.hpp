@@ -51,11 +51,13 @@
 namespace KokkosGraph {
 
 enum ColoringAlgorithm { COLORING_DEFAULT,
-                         COLORING_SERIAL,
-                         COLORING_VB,
-                         COLORING_VBBIT,
-                         COLORING_VBCS,
-                         COLORING_EB,
+                         COLORING_SERIAL,                     // Serial Greedy Coloring
+                         COLORING_VB,                         // Vertex Based Coloring
+                         COLORING_VBBIT,                      // Vertex Based Coloring with bit array
+                         COLORING_VBCS,                       // Vertex Based Color Set
+                         COLORING_VBD,                        // Vertex Based Deterministic Coloring
+                         COLORING_VBDBIT,                     // Vertex Based Deterministic Coloring with bit array
+                         COLORING_EB,                         // Edge Based Coloring
                          COLORING_SERIAL2,
                          COLORING_SPGEMM,
                          COLORING_D2_MATRIX_SQUARED,          // Distance-2 Graph Coloring (Brian's Code)
@@ -66,7 +68,7 @@ enum ConflictList{COLORING_NOCONFLICT, COLORING_ATOMIC, COLORING_PPS};
 
 enum ColoringType {Distance1, Distance2};
 
-template <class size_type_, class color_t_, class lno_t_, 
+template <class size_type_, class color_t_, class lno_t_,
          //class lno_row_view_t_, class nonconst_color_view_t_, class lno_nnz_view_t_,
           class ExecutionSpace, class TemporaryMemorySpace, class PersistentMemorySpace>
 class GraphColoringHandle
@@ -113,7 +115,7 @@ private:
 
   ColoringType GraphColoringType;
   //Parameters
-  ColoringAlgorithm coloring_algorithm_type; //VB, VBBIT or EB.
+  ColoringAlgorithm coloring_algorithm_type; //VB, VBBIT, VBCS, VBD or EB.
   ConflictList conflict_list_type;  // whether to use a conflict list or not, and
                                     // if using it wheter to create it with atomic or parallel prefix sum.
 
@@ -216,7 +218,7 @@ private:
    */
   void choose_default_algorithm()
   {
-#if defined( KOKKOS_HAVE_SERIAL )
+#if defined( KOKKOS_ENABLE_SERIAL )
     if (Kokkos::Impl::is_same< Kokkos::Serial , ExecutionSpace >::value){
       this->coloring_algorithm_type = COLORING_SERIAL;
 #ifdef VERBOSE
@@ -225,7 +227,7 @@ private:
     }
 #endif
 
-#if defined( KOKKOS_HAVE_PTHREAD )
+#if defined( KOKKOS_ENABLE_THREADS )
     if (Kokkos::Impl::is_same< Kokkos::Threads , ExecutionSpace >::value){
       this->coloring_algorithm_type = COLORING_VB;
 #ifdef VERBOSE
@@ -234,7 +236,7 @@ private:
     }
 #endif
 
-#if defined( KOKKOS_HAVE_OPENMP )
+#if defined( KOKKOS_ENABLE_OPENMP )
     if (Kokkos::Impl::is_same< Kokkos::OpenMP, ExecutionSpace >::value){
       this->coloring_algorithm_type = COLORING_VB;
 #ifdef VERBOSE
@@ -247,12 +249,12 @@ private:
     if (Kokkos::Impl::is_same<Kokkos::Cuda, ExecutionSpace >::value){
       this->coloring_algorithm_type = COLORING_EB;
 #ifdef VERBOSE
-      std::cout << "Qthread Execution Space, Default Algorithm: COLORING_VB" << std::endl;
+      std::cout << "Cuda Execution Space, Default Algorithm: COLORING_VB" << std::endl;
 #endif
     }
 #endif
 
-#if defined( KOKKOS_HAVE_QTHREAD)
+#if defined( KOKKOS_ENABLE_QTHREAD)
     if (Kokkos::Impl::is_same< Kokkos::Qthread, ExecutionSpace >::value){
       this->coloring_algorithm_type = COLORING_VB;
 #ifdef VERBOSE
@@ -454,7 +456,7 @@ private:
         lower_triangle_src,
         lower_triangle_dst);
 
-    size_of_edge_list = lower_triangle_src.dimension_0();
+    size_of_edge_list = lower_triangle_src.extent(0);
 
   }
 
@@ -492,12 +494,26 @@ private:
         int vector_size = 0;
 
         CountLowerTriangleTeam<row_index_view_type, nonzero_view_type, size_type_temp_work_view_t> clt (nv, xadj, adj, lower_count);
+#ifdef KOKKOS_ENABLE_DEPRECATED_CODE
         int max_allowed_team_size = team_policy_t::team_size_max(clt);
         KokkosKernels::Impl::get_suggested_vector_team_size<size_type, HandleExecSpace>(
             max_allowed_team_size,
             vector_size,
             teamSizeMax,
             nv, ne);
+#else
+        KokkosKernels::Impl::get_suggested_vector_size<size_type, HandleExecSpace>(
+            vector_size,
+            nv, ne);
+
+        team_policy_t tmp_policy(nv, Kokkos::AUTO, vector_size);
+        int max_allowed_team_size = tmp_policy.team_size_max( clt, Kokkos::ParallelForTag() );
+
+        KokkosKernels::Impl::get_suggested_team_size<HandleExecSpace>(
+            max_allowed_team_size,
+            vector_size,
+            teamSizeMax);
+#endif
 
         Kokkos::parallel_for("KokkosGraph::CountLowerTriangleTeam",
             team_policy_t(nv / teamSizeMax + 1 , teamSizeMax, vector_size),
@@ -578,7 +594,7 @@ private:
   nnz_lno_t get_num_colors(){
     if (num_colors == 0){
       typedef typename Kokkos::RangePolicy<ExecutionSpace> my_exec_space;
-      Kokkos::parallel_reduce("KokkosKernels::FindMax", my_exec_space(0, vertex_colors.dimension_0()),
+      Kokkos::parallel_reduce("KokkosKernels::FindMax", my_exec_space(0, vertex_colors.extent(0)),
           ReduceMaxFunctor(vertex_colors) ,num_colors);
     }
     return num_colors;
@@ -593,6 +609,8 @@ private:
     case COLORING_VB:
     case COLORING_VBBIT:
     case COLORING_VBCS:
+    case COLORING_VBD:
+    case COLORING_VBDBIT:
     case COLORING_SERIAL:
     case COLORING_SERIAL2:
     case COLORING_SPGEMM:

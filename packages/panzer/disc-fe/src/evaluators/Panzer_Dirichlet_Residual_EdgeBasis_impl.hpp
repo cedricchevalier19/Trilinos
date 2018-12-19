@@ -79,12 +79,12 @@ DirichletResidual_EdgeBasis(
 
   // some sanity checks
   TEUCHOS_ASSERT(basis->isVectorBasis());
-  TEUCHOS_ASSERT(basis_layout->dimension(0)==vector_layout_dof->dimension(0));
-  TEUCHOS_ASSERT(basis_layout->dimension(1)==vector_layout_dof->dimension(1));
-  TEUCHOS_ASSERT(Teuchos::as<unsigned>(basis->dimension())==vector_layout_dof->dimension(2));
-  TEUCHOS_ASSERT(vector_layout_vector->dimension(0)==vector_layout_dof->dimension(0));
-  TEUCHOS_ASSERT(vector_layout_vector->dimension(1)==vector_layout_dof->dimension(1));
-  TEUCHOS_ASSERT(vector_layout_vector->dimension(2)==vector_layout_dof->dimension(2));
+  TEUCHOS_ASSERT(basis_layout->extent(0)==vector_layout_dof->extent(0));
+  TEUCHOS_ASSERT(basis_layout->extent(1)==vector_layout_dof->extent(1));
+  TEUCHOS_ASSERT(Teuchos::as<unsigned>(basis->dimension())==vector_layout_dof->extent(2));
+  TEUCHOS_ASSERT(vector_layout_vector->extent(0)==vector_layout_dof->extent(0));
+  TEUCHOS_ASSERT(vector_layout_vector->extent(1)==vector_layout_dof->extent(1));
+  TEUCHOS_ASSERT(vector_layout_vector->extent(2)==vector_layout_dof->extent(2));
 
   residual = PHX::MDField<ScalarT,Cell,BASIS>(residual_name, basis_layout);
   dof      = PHX::MDField<const ScalarT,Cell,Point,Dim>(dof_name, vector_layout_dof);
@@ -93,7 +93,7 @@ DirichletResidual_EdgeBasis(
   // setup all basis fields that are required
 
   // setup all fields to be evaluated and constructed
-  pointValues = PointValues2<ScalarT>(pointRule->getName()+"_",false);
+  pointValues = PointValues2<double>(pointRule->getName()+"_",false);
   pointValues.setupArrays(pointRule);
 
   // the field manager will allocate all of these field
@@ -117,10 +117,6 @@ postRegistrationSetup(
   PHX::FieldManager<Traits>& fm)
 {
   orientations = sd.orientations_;
-
-  this->utils.setFieldData(residual,fm);
-  this->utils.setFieldData(dof,fm);
-  this->utils.setFieldData(value,fm);
   this->utils.setFieldData(pointValues.jac,fm);
 }
 
